@@ -65,12 +65,7 @@ export default function LoginPage() {
         <p style={{ fontSize: 13, color: "var(--slate2)", marginTop: 18 }}>
           New here? <Link href="/register">Create a guest account</Link>
         </p>
-        <p style={{ fontSize: 12, color: "var(--slate2)", marginTop: 30, lineHeight: 1.6 }}>
-          Demo accounts (after seeding):<br />
-          admin@curbside.app / admin123<br />
-          staff@curbside.app / staff123<br />
-          guest@curbside.app / guest123
-        </p>
+        
       </main>
     </div>
   );
