@@ -4,11 +4,11 @@ const { signSession, sessionCookieHeader } = require("../../../../lib/auth");
 
 async function POST(req) {
   const body = await req.json();
-  const { email, password, name, buildingId } = body || {};
+  const { username, password, name, buildingId } = body || {};
 
-  if (!email || !password || !name || !buildingId) {
+  if (!username || !password || !name || !buildingId) {
     return new Response(
-      JSON.stringify({ error: "Name, email, password, and building are required." }),
+      JSON.stringify({ error: "Name, username, password, and building are required." }),
       { status: 400 }
     );
   }
@@ -20,9 +20,9 @@ async function POST(req) {
     });
   }
 
-  const existing = await prisma.user.findUnique({ where: { email } });
+  const existing = await prisma.user.findUnique({ where: { username } });
   if (existing) {
-    return new Response(JSON.stringify({ error: "An account with this email already exists." }), {
+    return new Response(JSON.stringify({ error: "That username is already taken." }), {
       status: 409,
     });
   }
@@ -32,13 +32,13 @@ async function POST(req) {
   // Self-service signups are always GUEST. Staff/admin accounts are created
   // by an admin via /api/admin/users.
   const user = await prisma.user.create({
-    data: { email, passwordHash, name, role: "GUEST", buildingId },
+    data: { username, passwordHash, name, role: "GUEST", buildingId },
   });
 
   const token = signSession(user);
 
   return new Response(
-    JSON.stringify({ id: user.id, email: user.email, name: user.name, role: user.role }),
+    JSON.stringify({ id: user.id, username: user.username, name: user.name, role: user.role }),
     {
       status: 201,
       headers: { "Set-Cookie": sessionCookieHeader(token), "Content-Type": "application/json" },

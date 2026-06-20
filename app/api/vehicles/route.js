@@ -8,7 +8,7 @@ async function GET(req) {
   const where = session.role === "GUEST" ? { ownerId: session.id } : {};
   const vehicles = await prisma.vehicle.findMany({
     where,
-    include: { owner: { select: { name: true, email: true } } },
+    include: { owner: { select: { name: true, username: true } } },
     orderBy: { createdAt: "desc" },
   });
 

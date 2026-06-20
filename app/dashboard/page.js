@@ -66,7 +66,7 @@ export default function Dashboard() {
         {showPasswordPanel && <ChangePasswordPanel onClose={() => setShowPasswordPanel(false)} />}
       </main>
       <footer className="note">
-        Signed in as {user.name} ({user.email})
+        Signed in as {user.name} ({user.username})
         {" · "}
         <button
           onClick={() => setShowPasswordPanel((v) => !v)}
@@ -847,7 +847,7 @@ function UserAdmin() {
     const form = e.target;
     const body = {
       name: form.name.value,
-      email: form.email.value,
+      username: form.username.value,
       password: form.password.value,
       role: form.role.value,
       buildingId: form.buildingId ? form.buildingId.value : null,
@@ -883,7 +883,7 @@ function UserAdmin() {
           <div>
             <div>{u.name}</div>
             <div style={{ fontSize: 12, color: "var(--slate2)" }}>
-              {u.email}
+              {u.username}
               {u.building ? ` · ${u.building.name}` : ""}
             </div>
           </div>
@@ -898,8 +898,8 @@ function UserAdmin() {
             <input name="name" required />
           </div>
           <div className="field">
-            <label>Email</label>
-            <input name="email" type="email" required />
+            <label>Username</label>
+            <input name="username" type="text" required />
           </div>
           <div className="field">
             <label>Password</label>

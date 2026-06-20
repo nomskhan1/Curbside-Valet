@@ -6,7 +6,7 @@ import Link from "next/link";
 export default function RegisterPage() {
   const router = useRouter();
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [buildingId, setBuildingId] = useState("");
   const [buildings, setBuildings] = useState([]);
@@ -26,7 +26,7 @@ export default function RegisterPage() {
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password, buildingId }),
+      body: JSON.stringify({ name, username, password, buildingId }),
     });
     const data = await res.json();
     setLoading(false);
@@ -58,8 +58,8 @@ export default function RegisterPage() {
             <input id="name" type="text" value={name} onChange={(e) => setName(e.target.value)} required />
           </div>
           <div className="field">
-            <label htmlFor="email">Email</label>
-            <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <label htmlFor="username">Username</label>
+            <input id="username" type="text" value={username} onChange={(e) => setUsername(e.target.value)} required />
           </div>
           <div className="field">
             <label htmlFor="password">Password</label>

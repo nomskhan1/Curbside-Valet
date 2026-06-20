@@ -11,7 +11,7 @@ async function GET(req) {
   const users = await prisma.user.findMany({
     select: {
       id: true,
-      email: true,
+      username: true,
       name: true,
       role: true,
       createdAt: true,
@@ -30,10 +30,10 @@ async function POST(req) {
   }
 
   const body = await req.json();
-  const { email, password, name, role, buildingId } = body || {};
+  const { username, password, name, role, buildingId } = body || {};
 
-  if (!email || !password || !name || !["GUEST", "STAFF", "ADMIN"].includes(role)) {
-    return new Response(JSON.stringify({ error: "Name, email, password, and a valid role are required." }), {
+  if (!username || !password || !name || !["GUEST", "STAFF", "ADMIN"].includes(role)) {
+    return new Response(JSON.stringify({ error: "Name, username, password, and a valid role are required." }), {
       status: 400,
     });
   }
@@ -46,20 +46,20 @@ async function POST(req) {
     });
   }
 
-  const existing = await prisma.user.findUnique({ where: { email } });
+  const existing = await prisma.user.findUnique({ where: { username } });
   if (existing) {
-    return new Response(JSON.stringify({ error: "An account with this email already exists." }), {
+    return new Response(JSON.stringify({ error: "That username is already taken." }), {
       status: 409,
     });
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await prisma.user.create({
-    data: { email, passwordHash, name, role, buildingId: buildingId || null },
+    data: { username, passwordHash, name, role, buildingId: buildingId || null },
   });
 
   return new Response(
-    JSON.stringify({ id: user.id, email: user.email, name: user.name, role: user.role }),
+    JSON.stringify({ id: user.id, username: user.username, name: user.name, role: user.role }),
     { status: 201 }
   );
 }

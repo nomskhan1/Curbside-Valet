@@ -22,10 +22,10 @@ async function main() {
   const guestPass = await bcrypt.hash("guest123", 10);
 
   const admin = await prisma.user.upsert({
-    where: { email: "admin@curbside.app" },
+    where: { username: "admin" },
     update: {},
     create: {
-      email: "admin@curbside.app",
+      username: "admin",
       passwordHash: adminPass,
       name: "Avery Admin",
       role: "ADMIN", // admin accounts are global, no building needed
@@ -33,10 +33,10 @@ async function main() {
   });
 
   const staff = await prisma.user.upsert({
-    where: { email: "staff@curbside.app" },
+    where: { username: "staff" },
     update: { buildingId: building.id },
     create: {
-      email: "staff@curbside.app",
+      username: "staff",
       passwordHash: staffPass,
       name: "Sam Staff",
       role: "STAFF",
@@ -45,10 +45,10 @@ async function main() {
   });
 
   const guest = await prisma.user.upsert({
-    where: { email: "guest@curbside.app" },
+    where: { username: "guest" },
     update: { buildingId: building.id },
     create: {
-      email: "guest@curbside.app",
+      username: "guest",
       passwordHash: guestPass,
       name: "Jordan Park",
       role: "GUEST",
@@ -72,9 +72,9 @@ async function main() {
 
   console.log("Seeded:");
   console.log("  Building -> " + building.name);
-  console.log("  Admin -> admin@curbside.app / admin123 (global, all buildings)");
-  console.log("  Staff -> staff@curbside.app / staff123 (" + building.name + ")");
-  console.log("  Guest -> guest@curbside.app / guest123 (ticket #042, " + building.name + ")");
+  console.log("  Admin -> username: admin / password: admin123 (global, all buildings)");
+  console.log("  Staff -> username: staff / password: staff123 (" + building.name + ")");
+  console.log("  Guest -> username: guest / password: guest123 (ticket #042, " + building.name + ")");
 }
 
 main()

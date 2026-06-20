@@ -13,7 +13,7 @@ async function GET(req) {
     where: { status: { in: ["COMPLETED", "CANCELLED"] } },
     include: {
       vehicle: { include: { building: { select: { name: true } } } },
-      requestedBy: { select: { name: true, email: true } },
+      requestedBy: { select: { name: true, username: true } },
       handledBy: { select: { name: true } },
     },
     orderBy: { createdAt: "desc" },
