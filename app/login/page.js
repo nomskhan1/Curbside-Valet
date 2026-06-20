@@ -32,7 +32,7 @@ export default function LoginPage() {
     <div className="shell">
       <header className="topbar">
         <div className="brand">
-          <span className="mark">Curbside</span>
+          <span className="mark">Integral</span>
           <span className="sub">Valet</span>
         </div>
       </header>

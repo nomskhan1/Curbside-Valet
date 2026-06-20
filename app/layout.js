@@ -1,7 +1,7 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "Curbside — Valet",
+  title: "Integral Valet",
   description: "Request and manage valet vehicle pickups.",
 };
 
