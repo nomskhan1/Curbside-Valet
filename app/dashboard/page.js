@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 const STATUS_LABEL = {
@@ -12,8 +12,8 @@ const STATUS_LABEL = {
 
 export default function Dashboard() {
   const router = useRouter();
-  const [user, setUser] = useState(undefined); // undefined = loading, null = signed out
-  const [tab, setTab] = useState("queue"); // staff/admin: "queue" | "users" (admin only)
+  const [user, setUser] = useState(undefined);
+  const [tab, setTab] = useState("queue");
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -57,7 +57,6 @@ export default function Dashboard() {
   );
 }
 
-// ---------------- GUEST ----------------
 function GuestView({ user }) {
   const [vehicles, setVehicles] = useState([]);
   const [requests, setRequests] = useState([]);
@@ -233,9 +232,28 @@ function GuestView({ user }) {
   );
 }
 
-// ---------------- STAFF / ADMIN ----------------
+function playAlertBeep(ctx) {
+  const now = ctx.currentTime;
+  [880, 660].forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = freq;
+    const start = now + i * 0.18;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.25, start + 0.02);
+    gain.gain.linearRampToValueAtTime(0, start + 0.16);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(start);
+    osc.stop(start + 0.18);
+  });
+}
+
 function StaffView({ user, tab, setTab }) {
   const [requests, setRequests] = useState([]);
+  const [alertsEnabled, setAlertsEnabled] = useState(false);
+  const audioCtxRef = useRef(null);
+  const beepIntervalRef = useRef(null);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/requests");
@@ -248,6 +266,37 @@ function StaffView({ user, tab, setTab }) {
     return () => clearInterval(id);
   }, [load]);
 
+  const waitingCount = requests.filter((r) => r.status === "WAITING").length;
+
+  function enableAlerts() {
+    if (!audioCtxRef.current) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      audioCtxRef.current = new AudioCtx();
+    }
+    audioCtxRef.current.resume();
+    setAlertsEnabled(true);
+  }
+
+  useEffect(() => {
+    if (alertsEnabled && waitingCount > 0 && audioCtxRef.current) {
+      if (!beepIntervalRef.current) {
+        playAlertBeep(audioCtxRef.current);
+        beepIntervalRef.current = setInterval(() => {
+          playAlertBeep(audioCtxRef.current);
+        }, 2000);
+      }
+    } else if (beepIntervalRef.current) {
+      clearInterval(beepIntervalRef.current);
+      beepIntervalRef.current = null;
+    }
+    return () => {
+      if (beepIntervalRef.current) {
+        clearInterval(beepIntervalRef.current);
+        beepIntervalRef.current = null;
+      }
+    };
+  }, [alertsEnabled, waitingCount]);
+
   async function advance(id, status) {
     await fetch(`/api/requests/${id}`, {
       method: "PATCH",
@@ -259,6 +308,16 @@ function StaffView({ user, tab, setTab }) {
 
   return (
     <>
+      {!alertsEnabled && (
+        <button
+          className="btn btn-ghost"
+          style={{ marginBottom: 16, borderColor: "var(--brass)", color: "var(--brass-light)" }}
+          onClick={enableAlerts}
+        >
+          🔔 Enable sound alerts
+        </button>
+      )}
+
       {user.role === "ADMIN" && (
         <div className="tabs">
           <button className={tab === "queue" ? "active" : ""} onClick={() => setTab("queue")}>
@@ -294,6 +353,9 @@ function StaffView({ user, tab, setTab }) {
                   </div>
                   <div className="meta">
                     {r.requestedBy.name} · {STATUS_LABEL[r.status]}
+                    {r.status === "WAITING" && alertsEnabled && (
+                      <span style={{ color: "var(--brass-light)", marginLeft: 6 }}>● ringing</span>
+                    )}
                   </div>
                 </div>
                 <div className="queue-actions">
@@ -324,7 +386,6 @@ function StaffView({ user, tab, setTab }) {
   );
 }
 
-// ---------------- ADMIN: USERS ----------------
 function UserAdmin() {
   const [users, setUsers] = useState([]);
   const [error, setError] = useState("");
