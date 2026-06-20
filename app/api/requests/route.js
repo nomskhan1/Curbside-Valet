@@ -25,7 +25,7 @@ async function GET(req) {
       vehicle: { include: { building: { select: { name: true } } } },
       requestedBy: { select: { name: true } },
     },
-    orderBy: { createdAt: "asc" },
+    orderBy: [{ scheduledFor: "asc" }, { createdAt: "asc" }],
   });
 
   return new Response(JSON.stringify(requests), { status: 200 });
@@ -36,25 +36,67 @@ async function POST(req) {
   if (!session) return new Response(JSON.stringify({ error: "Not signed in." }), { status: 401 });
 
   const body = await req.json();
-  const { vehicleId, etaMinutes } = body || {};
+  const { vehicleId, ticketNumber, etaMinutes, scheduledFor } = body || {};
 
-  if (!vehicleId) {
-    return new Response(JSON.stringify({ error: "vehicleId is required." }), { status: 400 });
+  if (!vehicleId && !ticketNumber) {
+    return new Response(JSON.stringify({ error: "vehicleId or ticketNumber is required." }), {
+      status: 400,
+    });
   }
 
-  const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
+  let vehicle;
+  if (vehicleId) {
+    vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
+  } else {
+    vehicle = await prisma.vehicle.findUnique({ where: { ticketNumber: ticketNumber.trim() } });
+  }
+
+  // Ticket number with no matching vehicle yet — this is a resident
+  // requesting pickup for a visitor's car that's never been entered into
+  // the system before. Just the ticket number is enough; staff can fill in
+  // car details later if they ever need to.
+  if (!vehicle && ticketNumber) {
+    vehicle = await prisma.vehicle.create({
+      data: {
+        ticketNumber: ticketNumber.trim(),
+        ownerId: session.id,
+        buildingId: session.buildingId || null,
+        isVisitor: true,
+      },
+    });
+  }
+
   if (!vehicle) {
-    return new Response(JSON.stringify({ error: "Vehicle not found." }), { status: 404 });
+    return new Response(
+      JSON.stringify({
+        error: ticketNumber
+          ? "No vehicle found with that ticket number."
+          : "Vehicle not found.",
+      }),
+      { status: 404 }
+    );
   }
-  if (session.role === "GUEST" && vehicle.ownerId !== session.id) {
+
+  // Guests requesting by their own saved vehicle must own it. Guests
+  // requesting by ticket number don't need to — the ticket itself is the
+  // proof, same as handing a physical valet stub to any staff member.
+  if (session.role === "GUEST" && vehicleId && vehicle.ownerId !== session.id) {
     return new Response(JSON.stringify({ error: "That vehicle isn't linked to your account." }), {
       status: 403,
     });
   }
 
+  // Ticket-based requests must be for a vehicle in the guest's own building.
+  if (session.role === "GUEST" && ticketNumber && vehicle.buildingId !== session.buildingId) {
+    return new Response(
+      JSON.stringify({ error: "That ticket number isn't registered at your building." }),
+      { status: 403 }
+    );
+  }
+
   // Avoid duplicate active requests for the same vehicle.
   const activeExisting = await prisma.request.findFirst({
-    where: { vehicleId, status: { in: ["WAITING", "PULLING", "READY"] } },
+    where: { vehicleId: vehicle.id, status: { in: ["WAITING", "PULLING", "READY"] } },
   });
   if (activeExisting) {
     return new Response(JSON.stringify({ error: "There's already an active request for this car." }), {
@@ -62,12 +104,26 @@ async function POST(req) {
     });
   }
 
+  let scheduledForDate = null;
+  if (scheduledFor) {
+    scheduledForDate = new Date(scheduledFor);
+    if (isNaN(scheduledForDate.getTime())) {
+      return new Response(JSON.stringify({ error: "Invalid scheduled time." }), { status: 400 });
+    }
+    if (scheduledForDate.getTime() < Date.now() - 60000) {
+      return new Response(JSON.stringify({ error: "Scheduled time must be in the future." }), {
+        status: 400,
+      });
+    }
+  }
+
   const request = await prisma.request.create({
     data: {
-      vehicleId,
+      vehicleId: vehicle.id,
       requestedById: session.id,
       etaMinutes: etaMinutes ?? 0,
       status: "WAITING",
+      scheduledFor: scheduledForDate,
     },
     include: { vehicle: true },
   });

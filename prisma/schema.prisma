@@ -45,15 +45,19 @@ model User {
 }
 
 model Vehicle {
-  id           String   @id @default(cuid())
-  make         String
-  model        String
+  id           String  @id @default(cuid())
+  make         String?
+  model        String?
   color        String?
   licensePlate String?
   ticketNumber String   @unique
   ownerId      String
   owner        User     @relation(fields: [ownerId], references: [id])
   createdAt    DateTime @default(now())
+
+  // True when this vehicle was registered on the fly by a resident
+  // requesting pickup for a visitor's car, rather than their own.
+  isVisitor Boolean @default(false)
 
   // Denormalized from the owner's building at creation time, so queue
   // queries can filter by building without an extra join.
@@ -73,6 +77,9 @@ model Request {
   handledBy     User?     @relation("HandledBy", fields: [handledById], references: [id])
   status        String    @default("WAITING")
   etaMinutes    Int       @default(0)
+  // If set, this is a request for a future pickup time rather than "right now".
+  // Staff still see it in the queue (so nothing gets missed), labeled with the time.
+  scheduledFor  DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   completedAt   DateTime?

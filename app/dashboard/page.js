@@ -10,10 +10,20 @@ const STATUS_LABEL = {
   CANCELLED: "Cancelled",
 };
 
+// Visitor cars created with just a ticket number won't have make/model on
+// file yet — fall back to a generic label instead of showing blank space.
+function vehicleLabel(vehicle) {
+  if (vehicle.make || vehicle.model) {
+    return [vehicle.color, vehicle.make, vehicle.model].filter(Boolean).join(" ");
+  }
+  return "Visitor vehicle (no details on file)";
+}
+
 export default function Dashboard() {
   const router = useRouter();
   const [user, setUser] = useState(undefined); // undefined = loading, null = signed out
   const [tab, setTab] = useState("queue"); // staff/admin: "queue" | "users" (admin only)
+  const [showPasswordPanel, setShowPasswordPanel] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -39,7 +49,8 @@ export default function Dashboard() {
     <div className="shell">
       <header className="topbar">
         <div className="brand">
-          <img src="/logo.png" alt="" className="logo" /><span className="mark">Integral</span>
+          <img src="/logo.png" alt="" className="logo" />
+          <span className="mark">Integral</span>
           <span className="sub">{user.role}</span>
         </div>
         <button className="btn-ghost" style={{ width: "auto", padding: "8px 14px", borderRadius: 20, fontSize: 11 }} onClick={logout}>
@@ -51,8 +62,118 @@ export default function Dashboard() {
         {(user.role === "STAFF" || user.role === "ADMIN") && (
           <StaffView user={user} tab={tab} setTab={setTab} />
         )}
+
+        {showPasswordPanel && <ChangePasswordPanel onClose={() => setShowPasswordPanel(false)} />}
       </main>
-      <footer className="note">Signed in as {user.name} ({user.email})</footer>
+      <footer className="note">
+        Signed in as {user.name} ({user.email})
+        {" · "}
+        <button
+          onClick={() => setShowPasswordPanel((v) => !v)}
+          style={{
+            background: "none",
+            border: "none",
+            color: "var(--brass-light)",
+            fontSize: 11,
+            cursor: "pointer",
+            padding: 0,
+            textDecoration: "underline",
+          }}
+        >
+          Change password
+        </button>
+      </footer>
+    </div>
+  );
+}
+
+// ---------------- CHANGE PASSWORD ----------------
+function ChangePasswordPanel({ onClose }) {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    if (newPassword !== confirmPassword) {
+      setError("New password and confirmation don't match.");
+      return;
+    }
+    setLoading(true);
+    const res = await fetch("/api/auth/change-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    const data = await res.json();
+    setLoading(false);
+    if (!res.ok) {
+      setError(data.error || "Couldn't change password.");
+      return;
+    }
+    setSuccess(true);
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+  }
+
+  return (
+    <div className="stub" style={{ marginTop: 20 }}>
+      <div className="stub-top">
+        <h1 className="title" style={{ marginBottom: 0, fontSize: 18 }}>
+          Change password
+        </h1>
+        <button
+          onClick={onClose}
+          style={{ background: "none", border: "none", color: "var(--slate2)", cursor: "pointer", fontSize: 13 }}
+        >
+          Close
+        </button>
+      </div>
+
+      {error && <div className="error-box">{error}</div>}
+      {success ? (
+        <p style={{ color: "var(--green)", fontSize: 14 }}>Password updated successfully.</p>
+      ) : (
+        <form onSubmit={handleSubmit}>
+          <div className="field">
+            <label>Current password</label>
+            <input
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              required
+            />
+          </div>
+          <div className="field">
+            <label>New password</label>
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+              minLength={6}
+            />
+          </div>
+          <div className="field">
+            <label>Confirm new password</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              minLength={6}
+            />
+          </div>
+          <button className="btn btn-primary" disabled={loading} type="submit">
+            {loading ? "Updating..." : "Update password"}
+          </button>
+        </form>
+      )}
     </div>
   );
 }
@@ -63,6 +184,9 @@ function GuestView({ user }) {
   const [requests, setRequests] = useState([]);
   const [error, setError] = useState("");
   const [showAddVehicle, setShowAddVehicle] = useState(false);
+  const [showTicketForm, setShowTicketForm] = useState(false);
+  const [scheduleMode, setScheduleMode] = useState(false);
+  const [scheduledFor, setScheduledFor] = useState("");
 
   const load = useCallback(async () => {
     const [vRes, rRes] = await Promise.all([fetch("/api/vehicles"), fetch("/api/requests")]);
@@ -76,6 +200,8 @@ function GuestView({ user }) {
     return () => clearInterval(id);
   }, [load]);
 
+  // "Active" includes scheduled-for-later requests too, so a guest can't
+  // queue up two pickups at once and so they see the scheduled stub.
   const activeRequest = requests.find((r) => ["WAITING", "PULLING", "READY"].includes(r.status));
 
   async function addVehicle(e) {
@@ -104,19 +230,37 @@ function GuestView({ user }) {
     load();
   }
 
-  async function requestPickup(vehicleId) {
+  async function submitRequest(payload) {
     setError("");
+    const body = { ...payload };
+    if (scheduleMode && scheduledFor) {
+      body.scheduledFor = new Date(scheduledFor).toISOString();
+    }
     const res = await fetch("/api/requests", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ vehicleId, etaMinutes: 0 }),
+      body: JSON.stringify(body),
     });
     const data = await res.json();
     if (!res.ok) {
       setError(data.error);
       return;
     }
+    setScheduleMode(false);
+    setScheduledFor("");
+    setShowTicketForm(false);
     load();
+  }
+
+  async function requestPickup(vehicleId) {
+    submitRequest({ vehicleId });
+  }
+
+  async function requestByTicket(e) {
+    e.preventDefault();
+    const ticketNumber = e.target.ticketNumber.value.trim();
+    if (!ticketNumber) return;
+    submitRequest({ ticketNumber });
   }
 
   async function cancel(requestId) {
@@ -129,10 +273,11 @@ function GuestView({ user }) {
   }
 
   if (activeRequest) {
+    const isFuture = activeRequest.scheduledFor && new Date(activeRequest.scheduledFor) > new Date();
     return (
       <>
         <div className="hero-line">Ticket received</div>
-        <h1 className="title">We're on it</h1>
+        <h1 className="title">{isFuture ? "Pickup scheduled" : "We're on it"}</h1>
         <div className="stub">
           <div className="stub-top">
             <div>
@@ -141,20 +286,27 @@ function GuestView({ user }) {
             </div>
             <span className={`status-pill status-${activeRequest.status}`}>
               <span className="dot"></span>
-              {STATUS_LABEL[activeRequest.status]}
+              {isFuture ? "Scheduled" : STATUS_LABEL[activeRequest.status]}
             </span>
           </div>
           <div className="stub-divider"></div>
           <div className="stub-row">
             <span>Vehicle</span>
             <span>
-              {activeRequest.vehicle.color} {activeRequest.vehicle.make} {activeRequest.vehicle.model}
+              {vehicleLabel(activeRequest.vehicle)}
             </span>
           </div>
-          <div className="stub-row">
-            <span>Requested</span>
-            <span>{new Date(activeRequest.createdAt).toLocaleTimeString()}</span>
-          </div>
+          {isFuture ? (
+            <div className="stub-row">
+              <span>Scheduled for</span>
+              <span>{new Date(activeRequest.scheduledFor).toLocaleString()}</span>
+            </div>
+          ) : (
+            <div className="stub-row">
+              <span>Requested</span>
+              <span>{new Date(activeRequest.createdAt).toLocaleTimeString()}</span>
+            </div>
+          )}
         </div>
         {activeRequest.status === "WAITING" && (
           <button className="btn btn-ghost" onClick={() => cancel(activeRequest.id)}>
@@ -195,6 +347,28 @@ function GuestView({ user }) {
         </div>
       ))}
 
+      {/* Schedule-for-later toggle, applies to whichever request button is pressed next */}
+      <div className="field" style={{ marginTop: 10 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={scheduleMode}
+            onChange={(e) => setScheduleMode(e.target.checked)}
+            style={{ width: "auto" }}
+          />
+          Schedule for later instead of right now
+        </label>
+        {scheduleMode && (
+          <input
+            type="datetime-local"
+            value={scheduledFor}
+            onChange={(e) => setScheduledFor(e.target.value)}
+            style={{ marginTop: 10 }}
+            required
+          />
+        )}
+      </div>
+
       {showAddVehicle ? (
         <form onSubmit={addVehicle} style={{ marginTop: 18 }}>
           <div className="field">
@@ -227,6 +401,30 @@ function GuestView({ user }) {
       ) : (
         <button className="btn btn-ghost" onClick={() => setShowAddVehicle(true)} style={{ marginTop: 14 }}>
           + Add a vehicle
+        </button>
+      )}
+
+      <div className="stub-divider" style={{ margin: "22px 0" }}></div>
+
+      {showTicketForm ? (
+        <form onSubmit={requestByTicket}>
+          <div className="hero-line" style={{ marginBottom: 10 }}>
+            Requesting a visitor's car
+          </div>
+          <div className="field">
+            <label>Ticket number</label>
+            <input name="ticketNumber" placeholder="e.g. 042" required />
+          </div>
+          <button className="btn btn-primary" type="submit">
+            Request this car
+          </button>
+          <button className="btn btn-ghost" type="button" onClick={() => setShowTicketForm(false)}>
+            Cancel
+          </button>
+        </form>
+      ) : (
+        <button className="btn btn-ghost" onClick={() => setShowTicketForm(true)}>
+          Request a visitor's car instead
         </button>
       )}
     </>
@@ -271,7 +469,11 @@ function StaffView({ user, tab, setTab }) {
     return () => clearInterval(id);
   }, [load]);
 
-  const waitingCount = requests.filter((r) => r.status === "WAITING").length;
+  // Don't ring for requests scheduled for later — only for ones that are
+  // actually due now (no scheduledFor, or a scheduledFor time that's arrived).
+  const waitingCount = requests.filter(
+    (r) => r.status === "WAITING" && (!r.scheduledFor || new Date(r.scheduledFor) <= new Date())
+  ).length;
 
   // Browsers block sound until a person interacts with the page once.
   // Staff tap "Enable alerts" at the start of their shift to unlock it.
@@ -359,40 +561,64 @@ function StaffView({ user, tab, setTab }) {
               All caught up — no pending pickups.
             </div>
           ) : (
-            requests.map((r) => (
-              <div key={r.id} className="queue-item">
-                <div className="queue-num">#{r.vehicle.ticketNumber}</div>
-                <div className="queue-info">
-                  <div className="car">
-                    {r.vehicle.color} {r.vehicle.make} {r.vehicle.model}
+            requests.map((r) => {
+              const isFuture = r.scheduledFor && new Date(r.scheduledFor) > new Date();
+              return (
+                <div key={r.id} className="queue-item">
+                  <div className="queue-num">#{r.vehicle.ticketNumber}</div>
+                  <div className="queue-info">
+                    <div className="car">
+                      {vehicleLabel(r.vehicle)}
+                      {r.vehicle.isVisitor && (
+                        <span
+                          style={{
+                            marginLeft: 8,
+                            fontSize: 10,
+                            padding: "2px 7px",
+                            borderRadius: 10,
+                            border: "1px solid var(--line)",
+                            color: "var(--slate2)",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.06em",
+                          }}
+                        >
+                          Visitor
+                        </span>
+                      )}
+                    </div>
+                    <div className="meta">
+                      {r.requestedBy.name}
+                      {r.vehicle.building ? ` · ${r.vehicle.building.name}` : ""} · {STATUS_LABEL[r.status]}
+                      {isFuture && (
+                        <span style={{ color: "var(--brass-light)", marginLeft: 6 }}>
+                          · scheduled {new Date(r.scheduledFor).toLocaleString()}
+                        </span>
+                      )}
+                      {r.status === "WAITING" && !isFuture && alertsEnabled && (
+                        <span style={{ color: "var(--brass-light)", marginLeft: 6 }}>● ringing</span>
+                      )}
+                    </div>
                   </div>
-                  <div className="meta">
-                    {r.requestedBy.name}
-                    {r.vehicle.building ? ` · ${r.vehicle.building.name}` : ""} · {STATUS_LABEL[r.status]}
-                    {r.status === "WAITING" && alertsEnabled && (
-                      <span style={{ color: "var(--brass-light)", marginLeft: 6 }}>● ringing</span>
+                  <div className="queue-actions">
+                    {r.status === "WAITING" && (
+                      <button className="mini-btn start" onClick={() => advance(r.id, "PULLING")}>
+                        Start pull
+                      </button>
+                    )}
+                    {r.status === "PULLING" && (
+                      <button className="mini-btn ready" onClick={() => advance(r.id, "READY")}>
+                        Mark ready
+                      </button>
+                    )}
+                    {r.status === "READY" && (
+                      <button className="mini-btn done" onClick={() => advance(r.id, "COMPLETED")}>
+                        Complete
+                      </button>
                     )}
                   </div>
                 </div>
-                <div className="queue-actions">
-                  {r.status === "WAITING" && (
-                    <button className="mini-btn start" onClick={() => advance(r.id, "PULLING")}>
-                      Start pull
-                    </button>
-                  )}
-                  {r.status === "PULLING" && (
-                    <button className="mini-btn ready" onClick={() => advance(r.id, "READY")}>
-                      Mark ready
-                    </button>
-                  )}
-                  {r.status === "READY" && (
-                    <button className="mini-btn done" onClick={() => advance(r.id, "COMPLETED")}>
-                      Complete
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </>
       )}
@@ -553,7 +779,23 @@ function HistoryView() {
               <div className="queue-num">#{r.vehicle.ticketNumber}</div>
               <div className="queue-info">
                 <div className="car">
-                  {r.vehicle.color} {r.vehicle.make} {r.vehicle.model}
+                  {vehicleLabel(r.vehicle)}
+                  {r.vehicle.isVisitor && (
+                    <span
+                      style={{
+                        marginLeft: 8,
+                        fontSize: 10,
+                        padding: "2px 7px",
+                        borderRadius: 10,
+                        border: "1px solid var(--line)",
+                        color: "var(--slate2)",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                      }}
+                    >
+                      Visitor
+                    </span>
+                  )}
                 </div>
                 <div className="meta">
                   {r.requestedBy.name}
