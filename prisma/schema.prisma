@@ -1,0 +1,63 @@
+// Prisma schema for Curbside Valet
+// Default datasource is SQLite for easy local dev.
+// For production on Vercel, switch provider to "postgresql" and
+// set DATABASE_URL to your Postgres connection string (e.g. Neon, Vercel Postgres, Supabase).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Note: SQLite doesn't support native Prisma enums, so `role` and `status`
+// below are plain strings. Valid values are enforced in application code
+// (see lib/auth.js and the API routes in app/api/).
+// role:   "GUEST" | "STAFF" | "ADMIN"
+// status: "WAITING" | "PULLING" | "READY" | "COMPLETED" | "CANCELLED"
+// If you switch the datasource to "postgresql", you can convert these back
+// to real `enum` types if you'd like the extra DB-level safety.
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         String   @default("GUEST")
+  createdAt    DateTime @default(now())
+
+  vehicles     Vehicle[]
+  requests     Request[] @relation("RequestedBy")
+  handledRequests Request[] @relation("HandledBy")
+}
+
+model Vehicle {
+  id           String   @id @default(cuid())
+  make         String
+  model        String
+  color        String?
+  licensePlate String?
+  ticketNumber String   @unique
+  ownerId      String
+  owner        User     @relation(fields: [ownerId], references: [id])
+  createdAt    DateTime @default(now())
+
+  requests     Request[]
+}
+
+model Request {
+  id            String        @id @default(cuid())
+  vehicleId     String
+  vehicle       Vehicle       @relation(fields: [vehicleId], references: [id])
+  requestedById String
+  requestedBy   User          @relation("RequestedBy", fields: [requestedById], references: [id])
+  handledById   String?
+  handledBy     User?         @relation("HandledBy", fields: [handledById], references: [id])
+  status        String        @default("WAITING")
+  etaMinutes    Int           @default(0)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  completedAt   DateTime?
+}
