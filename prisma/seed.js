@@ -7,6 +7,16 @@ const bcrypt = require("bcryptjs");
 const prisma = new PrismaClient();
 
 async function main() {
+  const building = await prisma.building.upsert({
+    where: { id: "demo-building-1" },
+    update: {},
+    create: {
+      id: "demo-building-1",
+      name: "The Meridian Tower",
+      address: "100 Main St",
+    },
+  });
+
   const adminPass = await bcrypt.hash("admin123", 10);
   const staffPass = await bcrypt.hash("staff123", 10);
   const guestPass = await bcrypt.hash("guest123", 10);
@@ -18,35 +28,37 @@ async function main() {
       email: "admin@curbside.app",
       passwordHash: adminPass,
       name: "Avery Admin",
-      role: "ADMIN",
+      role: "ADMIN", // admin accounts are global, no building needed
     },
   });
 
   const staff = await prisma.user.upsert({
     where: { email: "staff@curbside.app" },
-    update: {},
+    update: { buildingId: building.id },
     create: {
       email: "staff@curbside.app",
       passwordHash: staffPass,
       name: "Sam Staff",
       role: "STAFF",
+      buildingId: building.id,
     },
   });
 
   const guest = await prisma.user.upsert({
     where: { email: "guest@curbside.app" },
-    update: {},
+    update: { buildingId: building.id },
     create: {
       email: "guest@curbside.app",
       passwordHash: guestPass,
       name: "Jordan Park",
       role: "GUEST",
+      buildingId: building.id,
     },
   });
 
   await prisma.vehicle.upsert({
     where: { ticketNumber: "042" },
-    update: {},
+    update: { buildingId: building.id },
     create: {
       make: "Audi",
       model: "Q5",
@@ -54,13 +66,15 @@ async function main() {
       licensePlate: "8XJ-201",
       ticketNumber: "042",
       ownerId: guest.id,
+      buildingId: building.id,
     },
   });
 
   console.log("Seeded:");
-  console.log("  Admin -> admin@curbside.app / admin123");
-  console.log("  Staff -> staff@curbside.app / staff123");
-  console.log("  Guest -> guest@curbside.app / guest123 (ticket #042)");
+  console.log("  Building -> " + building.name);
+  console.log("  Admin -> admin@curbside.app / admin123 (global, all buildings)");
+  console.log("  Staff -> staff@curbside.app / staff123 (" + building.name + ")");
+  console.log("  Guest -> guest@curbside.app / guest123 (ticket #042, " + building.name + ")");
 }
 
 main()

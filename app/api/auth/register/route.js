@@ -4,10 +4,18 @@ const { signSession, sessionCookieHeader } = require("../../../../lib/auth");
 
 async function POST(req) {
   const body = await req.json();
-  const { email, password, name } = body || {};
+  const { email, password, name, buildingId } = body || {};
 
-  if (!email || !password || !name) {
-    return new Response(JSON.stringify({ error: "Name, email, and password are required." }), {
+  if (!email || !password || !name || !buildingId) {
+    return new Response(
+      JSON.stringify({ error: "Name, email, password, and building are required." }),
+      { status: 400 }
+    );
+  }
+
+  const building = await prisma.building.findUnique({ where: { id: buildingId } });
+  if (!building) {
+    return new Response(JSON.stringify({ error: "Selected building wasn't found." }), {
       status: 400,
     });
   }
@@ -24,7 +32,7 @@ async function POST(req) {
   // Self-service signups are always GUEST. Staff/admin accounts are created
   // by an admin via /api/admin/users.
   const user = await prisma.user.create({
-    data: { email, passwordHash, name, role: "GUEST" },
+    data: { email, passwordHash, name, role: "GUEST", buildingId },
   });
 
   const token = signSession(user);

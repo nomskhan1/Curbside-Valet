@@ -12,8 +12,8 @@ const STATUS_LABEL = {
 
 export default function Dashboard() {
   const router = useRouter();
-  const [user, setUser] = useState(undefined);
-  const [tab, setTab] = useState("queue");
+  const [user, setUser] = useState(undefined); // undefined = loading, null = signed out
+  const [tab, setTab] = useState("queue"); // staff/admin: "queue" | "users" (admin only)
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -57,6 +57,7 @@ export default function Dashboard() {
   );
 }
 
+// ---------------- GUEST ----------------
 function GuestView({ user }) {
   const [vehicles, setVehicles] = useState([]);
   const [requests, setRequests] = useState([]);
@@ -232,6 +233,10 @@ function GuestView({ user }) {
   );
 }
 
+// ---------------- STAFF / ADMIN ----------------
+
+// Generates a short, attention-getting two-tone beep using the Web Audio API.
+// No audio file needed, and it works offline.
 function playAlertBeep(ctx) {
   const now = ctx.currentTime;
   [880, 660].forEach((freq, i) => {
@@ -268,6 +273,8 @@ function StaffView({ user, tab, setTab }) {
 
   const waitingCount = requests.filter((r) => r.status === "WAITING").length;
 
+  // Browsers block sound until a person interacts with the page once.
+  // Staff tap "Enable alerts" at the start of their shift to unlock it.
   function enableAlerts() {
     if (!audioCtxRef.current) {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -277,6 +284,8 @@ function StaffView({ user, tab, setTab }) {
     setAlertsEnabled(true);
   }
 
+  // Loop the beep every 2 seconds for as long as any request is WAITING.
+  // Stops the moment staff accept it (status moves to PULLING) or it's cancelled.
   useEffect(() => {
     if (alertsEnabled && waitingCount > 0 && audioCtxRef.current) {
       if (!beepIntervalRef.current) {
@@ -323,6 +332,12 @@ function StaffView({ user, tab, setTab }) {
           <button className={tab === "queue" ? "active" : ""} onClick={() => setTab("queue")}>
             Queue
           </button>
+          <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>
+            History
+          </button>
+          <button className={tab === "buildings" ? "active" : ""} onClick={() => setTab("buildings")}>
+            Buildings
+          </button>
           <button className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}>
             Users
           </button>
@@ -352,7 +367,8 @@ function StaffView({ user, tab, setTab }) {
                     {r.vehicle.color} {r.vehicle.make} {r.vehicle.model}
                   </div>
                   <div className="meta">
-                    {r.requestedBy.name} · {STATUS_LABEL[r.status]}
+                    {r.requestedBy.name}
+                    {r.vehicle.building ? ` · ${r.vehicle.building.name}` : ""} · {STATUS_LABEL[r.status]}
                     {r.status === "WAITING" && alertsEnabled && (
                       <span style={{ color: "var(--brass-light)", marginLeft: 6 }}>● ringing</span>
                     )}
@@ -381,19 +397,202 @@ function StaffView({ user, tab, setTab }) {
         </>
       )}
 
+      {tab === "history" && user.role === "ADMIN" && <HistoryView />}
+
+      {tab === "buildings" && user.role === "ADMIN" && <BuildingsView />}
+
       {tab === "users" && user.role === "ADMIN" && <UserAdmin />}
     </>
   );
 }
 
-function UserAdmin() {
-  const [users, setUsers] = useState([]);
+// ---------------- ADMIN: BUILDINGS ----------------
+function BuildingsView() {
+  const [buildings, setBuildings] = useState([]);
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/admin/users");
-    if (res.ok) setUsers(await res.json());
+    const res = await fetch("/api/admin/buildings");
+    if (res.ok) setBuildings(await res.json());
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function addBuilding(e) {
+    e.preventDefault();
+    setError("");
+    const form = e.target;
+    const body = { name: form.name.value, address: form.address.value };
+    const res = await fetch("/api/admin/buildings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error);
+      return;
+    }
+    form.reset();
+    setShowForm(false);
+    load();
+  }
+
+  async function removeBuilding(id) {
+    setError("");
+    const res = await fetch(`/api/admin/buildings/${id}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error);
+      return;
+    }
+    load();
+  }
+
+  return (
+    <>
+      <div className="queue-header">
+        <h1 className="title" style={{ marginBottom: 2 }}>
+          Buildings
+        </h1>
+        <span className="count-badge">{buildings.length} locations</span>
+      </div>
+      {error && <div className="error-box">{error}</div>}
+
+      {buildings.length === 0 && !showForm && (
+        <div className="empty-state">
+          <div className="big">No buildings yet</div>
+          Add your first property to start assigning staff and guests to it.
+        </div>
+      )}
+
+      {buildings.map((b) => (
+        <div key={b.id} className="queue-item">
+          <div className="queue-info">
+            <div className="car">{b.name}</div>
+            <div className="meta">
+              {b.address || "No address on file"} · {b._count?.users ?? 0} accounts · {b._count?.vehicles ?? 0} vehicles
+            </div>
+          </div>
+          <div className="queue-actions">
+            <button className="mini-btn done" onClick={() => removeBuilding(b.id)}>
+              Remove
+            </button>
+          </div>
+        </div>
+      ))}
+
+      {showForm ? (
+        <form onSubmit={addBuilding} style={{ marginTop: 18 }}>
+          <div className="field">
+            <label>Building name</label>
+            <input name="name" placeholder="e.g. The Meridian Tower" required />
+          </div>
+          <div className="field">
+            <label>Address (optional)</label>
+            <input name="address" placeholder="123 Main St" />
+          </div>
+          <button className="btn btn-primary" type="submit">
+            Save building
+          </button>
+          <button className="btn btn-ghost" type="button" onClick={() => setShowForm(false)}>
+            Cancel
+          </button>
+        </form>
+      ) : (
+        <button className="btn btn-ghost" onClick={() => setShowForm(true)} style={{ marginTop: 14 }}>
+          + Add a building
+        </button>
+      )}
+    </>
+  );
+}
+
+// ---------------- ADMIN: HISTORY ----------------
+function HistoryView() {
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    const res = await fetch("/api/requests/history");
+    if (res.ok) setHistory(await res.json());
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const STATUS_BADGE = {
+    COMPLETED: { label: "Completed", color: "var(--green)" },
+    CANCELLED: { label: "Cancelled", color: "var(--red)" },
+  };
+
+  return (
+    <>
+      <div className="queue-header">
+        <h1 className="title" style={{ marginBottom: 2 }}>
+          Request history
+        </h1>
+        <span className="count-badge">{history.length} records</span>
+      </div>
+
+      {loading ? null : history.length === 0 ? (
+        <div className="empty-state">
+          <div className="big">No history yet</div>
+          Completed and cancelled pickups will show up here.
+        </div>
+      ) : (
+        history.map((r) => {
+          const badge = STATUS_BADGE[r.status] || { label: r.status, color: "var(--slate2)" };
+          return (
+            <div key={r.id} className="queue-item">
+              <div className="queue-num">#{r.vehicle.ticketNumber}</div>
+              <div className="queue-info">
+                <div className="car">
+                  {r.vehicle.color} {r.vehicle.make} {r.vehicle.model}
+                </div>
+                <div className="meta">
+                  {r.requestedBy.name}
+                  {r.vehicle.building ? ` · ${r.vehicle.building.name}` : ""}
+                  {r.handledBy ? ` · handled by ${r.handledBy.name}` : ""}
+                  <br />
+                  {new Date(r.createdAt).toLocaleString()}
+                  {r.completedAt ? ` → ${new Date(r.completedAt).toLocaleTimeString()}` : ""}
+                </div>
+              </div>
+              <span
+                className="role-tag"
+                style={{ color: badge.color, borderColor: badge.color, flexShrink: 0 }}
+              >
+                {badge.label}
+              </span>
+            </div>
+          );
+        })
+      )}
+    </>
+  );
+}
+
+// ---------------- ADMIN: USERS ----------------
+function UserAdmin() {
+  const [users, setUsers] = useState([]);
+  const [buildings, setBuildings] = useState([]);
+  const [error, setError] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [role, setRole] = useState("STAFF");
+
+  const load = useCallback(async () => {
+    const [uRes, bRes] = await Promise.all([
+      fetch("/api/admin/users"),
+      fetch("/api/admin/buildings"),
+    ]);
+    if (uRes.ok) setUsers(await uRes.json());
+    if (bRes.ok) setBuildings(await bRes.json());
   }, []);
 
   useEffect(() => {
@@ -409,6 +608,7 @@ function UserAdmin() {
       email: form.email.value,
       password: form.password.value,
       role: form.role.value,
+      buildingId: form.buildingId ? form.buildingId.value : null,
     };
     const res = await fetch("/api/admin/users", {
       method: "POST",
@@ -422,6 +622,7 @@ function UserAdmin() {
     }
     form.reset();
     setShowForm(false);
+    setRole("STAFF");
     load();
   }
 
@@ -439,7 +640,10 @@ function UserAdmin() {
         <div key={u.id} className="list-row">
           <div>
             <div>{u.name}</div>
-            <div style={{ fontSize: 12, color: "var(--slate2)" }}>{u.email}</div>
+            <div style={{ fontSize: 12, color: "var(--slate2)" }}>
+              {u.email}
+              {u.building ? ` · ${u.building.name}` : ""}
+            </div>
           </div>
           <span className="role-tag">{u.role}</span>
         </div>
@@ -461,12 +665,27 @@ function UserAdmin() {
           </div>
           <div className="field">
             <label>Role</label>
-            <select name="role" defaultValue="STAFF">
+            <select name="role" value={role} onChange={(e) => setRole(e.target.value)}>
               <option value="STAFF">Staff</option>
               <option value="ADMIN">Admin</option>
               <option value="GUEST">Guest</option>
             </select>
           </div>
+          {role !== "ADMIN" && (
+            <div className="field">
+              <label>Building</label>
+              <select name="buildingId" required>
+                <option value="" disabled>
+                  Select a building…
+                </option>
+                {buildings.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <button className="btn btn-primary" type="submit">
             Create account
           </button>

@@ -44,6 +44,7 @@ async function POST(req) {
       licensePlate: licensePlate || null,
       ticketNumber,
       ownerId: session.id, // a guest registers their own car
+      buildingId: session.buildingId || null,
     },
   });
 

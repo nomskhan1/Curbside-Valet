@@ -5,14 +5,26 @@ async function GET(req) {
   const session = getSessionFromRequest(req);
   if (!session) return new Response(JSON.stringify({ error: "Not signed in." }), { status: 401 });
 
-  const where =
-    session.role === "GUEST"
-      ? { requestedById: session.id }
-      : { status: { in: ["WAITING", "PULLING", "READY"] } }; // staff/admin see the active queue
+  let where;
+  if (session.role === "GUEST") {
+    where = { requestedById: session.id };
+  } else if (session.role === "STAFF") {
+    // Staff only see the active queue for their own building.
+    where = {
+      status: { in: ["WAITING", "PULLING", "READY"] },
+      vehicle: { buildingId: session.buildingId || "__none__" }, // no buildingId = sees nothing, not everything
+    };
+  } else {
+    // ADMIN sees the active queue across every building.
+    where = { status: { in: ["WAITING", "PULLING", "READY"] } };
+  }
 
   const requests = await prisma.request.findMany({
     where,
-    include: { vehicle: true, requestedBy: { select: { name: true } } },
+    include: {
+      vehicle: { include: { building: { select: { name: true } } } },
+      requestedBy: { select: { name: true } },
+    },
     orderBy: { createdAt: "asc" },
   });
 

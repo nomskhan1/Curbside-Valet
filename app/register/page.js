@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -8,8 +8,16 @@ export default function RegisterPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [buildingId, setBuildingId] = useState("");
+  const [buildings, setBuildings] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/buildings")
+      .then((r) => r.json())
+      .then(setBuildings);
+  }, []);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -18,7 +26,7 @@ export default function RegisterPage() {
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password }),
+      body: JSON.stringify({ name, email, password, buildingId }),
     });
     const data = await res.json();
     setLoading(false);
@@ -63,6 +71,24 @@ export default function RegisterPage() {
               minLength={6}
             />
           </div>
+          <div className="field">
+            <label htmlFor="building">Building</label>
+            <select
+              id="building"
+              value={buildingId}
+              onChange={(e) => setBuildingId(e.target.value)}
+              required
+            >
+              <option value="" disabled>
+                Select your building…
+              </option>
+              {buildings.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
           <button className="btn btn-primary" disabled={loading} type="submit">
             {loading ? "Creating account..." : "Create account"}
           </button>
@@ -75,3 +101,4 @@ export default function RegisterPage() {
     </div>
   );
 }
+

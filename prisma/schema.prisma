@@ -1,7 +1,5 @@
 // Prisma schema for Curbside Valet
-// Default datasource is SQLite for easy local dev.
-// For production on Vercel, switch provider to "postgresql" and
-// set DATABASE_URL to your Postgres connection string (e.g. Neon, Vercel Postgres, Supabase).
+// Production datasource is Postgres (Neon).
 
 generator client {
   provider = "prisma-client-js"
@@ -12,13 +10,21 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Note: SQLite doesn't support native Prisma enums, so `role` and `status`
-// below are plain strings. Valid values are enforced in application code
+// Note: role/status are plain strings (not native enums) for portability.
+// Valid values are enforced in application code
 // (see lib/auth.js and the API routes in app/api/).
 // role:   "GUEST" | "STAFF" | "ADMIN"
 // status: "WAITING" | "PULLING" | "READY" | "COMPLETED" | "CANCELLED"
-// If you switch the datasource to "postgresql", you can convert these back
-// to real `enum` types if you'd like the extra DB-level safety.
+
+model Building {
+  id        String   @id @default(cuid())
+  name      String
+  address   String?
+  createdAt DateTime @default(now())
+
+  users    User[]
+  vehicles Vehicle[]
+}
 
 model User {
   id           String   @id @default(cuid())
@@ -28,8 +34,13 @@ model User {
   role         String   @default("GUEST")
   createdAt    DateTime @default(now())
 
-  vehicles     Vehicle[]
-  requests     Request[] @relation("RequestedBy")
+  // Which building this account belongs to. ADMIN accounts are typically
+  // global and can leave this null; STAFF and GUEST should always have one.
+  buildingId String?
+  building   Building? @relation(fields: [buildingId], references: [id])
+
+  vehicles        Vehicle[]
+  requests        Request[] @relation("RequestedBy")
   handledRequests Request[] @relation("HandledBy")
 }
 
@@ -44,20 +55,25 @@ model Vehicle {
   owner        User     @relation(fields: [ownerId], references: [id])
   createdAt    DateTime @default(now())
 
-  requests     Request[]
+  // Denormalized from the owner's building at creation time, so queue
+  // queries can filter by building without an extra join.
+  buildingId String?
+  building   Building? @relation(fields: [buildingId], references: [id])
+
+  requests Request[]
 }
 
 model Request {
-  id            String        @id @default(cuid())
+  id            String    @id @default(cuid())
   vehicleId     String
-  vehicle       Vehicle       @relation(fields: [vehicleId], references: [id])
+  vehicle       Vehicle   @relation(fields: [vehicleId], references: [id])
   requestedById String
-  requestedBy   User          @relation("RequestedBy", fields: [requestedById], references: [id])
+  requestedBy   User      @relation("RequestedBy", fields: [requestedById], references: [id])
   handledById   String?
-  handledBy     User?         @relation("HandledBy", fields: [handledById], references: [id])
-  status        String        @default("WAITING")
-  etaMinutes    Int           @default(0)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  handledBy     User?     @relation("HandledBy", fields: [handledById], references: [id])
+  status        String    @default("WAITING")
+  etaMinutes    Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
   completedAt   DateTime?
 }

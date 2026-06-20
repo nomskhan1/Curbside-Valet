@@ -15,13 +15,27 @@ async function PATCH(req, { params }) {
     return new Response(JSON.stringify({ error: "Invalid status." }), { status: 400 });
   }
 
-  const existing = await prisma.request.findUnique({ where: { id } });
+  const existing = await prisma.request.findUnique({
+    where: { id },
+    include: { vehicle: true },
+  });
   if (!existing) {
     return new Response(JSON.stringify({ error: "Request not found." }), { status: 404 });
   }
 
   const isOwner = existing.requestedById === session.id;
   const isStaff = session.role === "STAFF" || session.role === "ADMIN";
+
+  // Staff (not admin) can only act on requests from their own building.
+  if (
+    session.role === "STAFF" &&
+    existing.vehicle.buildingId &&
+    existing.vehicle.buildingId !== session.buildingId
+  ) {
+    return new Response(JSON.stringify({ error: "That request belongs to a different building." }), {
+      status: 403,
+    });
+  }
 
   // Guests may only cancel their own request. Staff/admin can set any status.
   if (status === "CANCELLED") {

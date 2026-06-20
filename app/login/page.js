@@ -65,7 +65,6 @@ export default function LoginPage() {
         <p style={{ fontSize: 13, color: "var(--slate2)", marginTop: 18 }}>
           New here? <Link href="/register">Create a guest account</Link>
         </p>
-        
       </main>
     </div>
   );

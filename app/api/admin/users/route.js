@@ -9,7 +9,14 @@ async function GET(req) {
   }
 
   const users = await prisma.user.findMany({
-    select: { id: true, email: true, name: true, role: true, createdAt: true },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      createdAt: true,
+      building: { select: { id: true, name: true } },
+    },
     orderBy: { createdAt: "desc" },
   });
 
@@ -23,10 +30,18 @@ async function POST(req) {
   }
 
   const body = await req.json();
-  const { email, password, name, role } = body || {};
+  const { email, password, name, role, buildingId } = body || {};
 
   if (!email || !password || !name || !["GUEST", "STAFF", "ADMIN"].includes(role)) {
     return new Response(JSON.stringify({ error: "Name, email, password, and a valid role are required." }), {
+      status: 400,
+    });
+  }
+
+  // Staff and guest accounts must belong to a building. Admin accounts are
+  // global, so a building is optional for them.
+  if ((role === "STAFF" || role === "GUEST") && !buildingId) {
+    return new Response(JSON.stringify({ error: "Please select a building for this account." }), {
       status: 400,
     });
   }
@@ -40,7 +55,7 @@ async function POST(req) {
 
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await prisma.user.create({
-    data: { email, passwordHash, name, role },
+    data: { email, passwordHash, name, role, buildingId: buildingId || null },
   });
 
   return new Response(
