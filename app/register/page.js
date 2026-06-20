@@ -41,6 +41,7 @@ export default function RegisterPage() {
     <div className="shell">
       <header className="topbar">
         <div className="brand">
+          <img src="/logo.png" alt="" className="logo" />
           <span className="mark">Integral</span>
           <span className="sub">Valet</span>
         </div>

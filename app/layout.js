@@ -3,6 +3,8 @@ import "./globals.css";
 export const metadata = {
   title: "Integral Valet",
   description: "Request and manage valet vehicle pickups.",
+  icons: {
+    icon: "/favicon.png",
 };
 
 export default function RootLayout({ children }) {

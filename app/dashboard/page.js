@@ -39,7 +39,7 @@ export default function Dashboard() {
     <div className="shell">
       <header className="topbar">
         <div className="brand">
-          <span className="mark">Integral</span>
+          <img src="/logo.png" alt="" className="logo" /><span className="mark">Integral</span>
           <span className="sub">{user.role}</span>
         </div>
         <button className="btn-ghost" style={{ width: "auto", padding: "8px 14px", borderRadius: 20, fontSize: 11 }} onClick={logout}>
