@@ -540,6 +540,9 @@ function StaffView({ user, tab, setTab }) {
           <button className={tab === "buildings" ? "active" : ""} onClick={() => setTab("buildings")}>
             Buildings
           </button>
+          <button className={tab === "vehicles" ? "active" : ""} onClick={() => setTab("vehicles")}>
+            Vehicles
+          </button>
           <button className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}>
             Users
           </button>
@@ -625,9 +628,120 @@ function StaffView({ user, tab, setTab }) {
 
       {tab === "history" && user.role === "ADMIN" && <HistoryView />}
 
+      {tab === "vehicles" && user.role === "ADMIN" && <VehiclesView />}
+
       {tab === "buildings" && user.role === "ADMIN" && <BuildingsView />}
 
       {tab === "users" && user.role === "ADMIN" && <UserAdmin />}
+    </>
+  );
+}
+
+// ---------------- ADMIN: VEHICLES ----------------
+function VehiclesView() {
+  const [vehicles, setVehicles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filterBuilding, setFilterBuilding] = useState("all");
+
+  const load = useCallback(async () => {
+    const res = await fetch("/api/vehicles");
+    if (res.ok) setVehicles(await res.json());
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const buildingNames = Array.from(
+    new Set(vehicles.map((v) => v.building?.name || "Unassigned"))
+  ).sort();
+
+  const grouped = {};
+  for (const v of vehicles) {
+    const key = v.building?.name || "Unassigned";
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(v);
+  }
+
+  const visibleGroups =
+    filterBuilding === "all" ? Object.keys(grouped).sort() : [filterBuilding];
+
+  return (
+    <>
+      <div className="queue-header">
+        <h1 className="title" style={{ marginBottom: 2 }}>
+          Registered vehicles
+        </h1>
+        <span className="count-badge">{vehicles.length} total</span>
+      </div>
+
+      {buildingNames.length > 1 && (
+        <div className="field">
+          <label>Filter by building</label>
+          <select value={filterBuilding} onChange={(e) => setFilterBuilding(e.target.value)}>
+            <option value="all">All buildings</option>
+            {buildingNames.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {loading ? null : vehicles.length === 0 ? (
+        <div className="empty-state">
+          <div className="big">No vehicles yet</div>
+          Registered vehicles will show up here once guests add them.
+        </div>
+      ) : (
+        visibleGroups.map((groupName) => (
+          <div key={groupName} style={{ marginBottom: 22 }}>
+            <div
+              style={{
+                fontSize: 12,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: "var(--brass-light)",
+                marginBottom: 8,
+                marginTop: 8,
+              }}
+            >
+              {groupName} ({grouped[groupName].length})
+            </div>
+            {grouped[groupName].map((v) => (
+              <div key={v.id} className="queue-item">
+                <div className="queue-num">#{v.ticketNumber}</div>
+                <div className="queue-info">
+                  <div className="car">
+                    {vehicleLabel(v)}
+                    {v.isVisitor && (
+                      <span
+                        style={{
+                          marginLeft: 8,
+                          fontSize: 10,
+                          padding: "2px 7px",
+                          borderRadius: 10,
+                          border: "1px solid var(--line)",
+                          color: "var(--slate2)",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.06em",
+                        }}
+                      >
+                        Visitor
+                      </span>
+                    )}
+                  </div>
+                  <div className="meta">
+                    {v.licensePlate || "No plate on file"} · owner: {v.owner?.name} ({v.owner?.username})
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ))
+      )}
     </>
   );
 }

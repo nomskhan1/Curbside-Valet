@@ -5,10 +5,21 @@ async function GET(req) {
   const session = getSessionFromRequest(req);
   if (!session) return new Response(JSON.stringify({ error: "Not signed in." }), { status: 401 });
 
-  const where = session.role === "GUEST" ? { ownerId: session.id } : {};
+  let where;
+  if (session.role === "GUEST") {
+    where = { ownerId: session.id };
+  } else if (session.role === "STAFF") {
+    where = { buildingId: session.buildingId || "__none__" };
+  } else {
+    where = {}; // ADMIN sees every building
+  }
+
   const vehicles = await prisma.vehicle.findMany({
     where,
-    include: { owner: { select: { name: true, username: true } } },
+    include: {
+      owner: { select: { name: true, username: true } },
+      building: { select: { id: true, name: true } },
+    },
     orderBy: { createdAt: "desc" },
   });
 
