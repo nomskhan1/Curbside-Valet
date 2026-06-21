@@ -868,6 +868,17 @@ function UserAdmin() {
     load();
   }
 
+  async function removeUser(id) {
+    setError("");
+    const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error);
+      return;
+    }
+    load();
+  }
+
   return (
     <>
       <div className="queue-header">
@@ -887,7 +898,28 @@ function UserAdmin() {
               {u.building ? ` · ${u.building.name}` : ""}
             </div>
           </div>
-          <span className="role-tag">{u.role}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span className="role-tag">{u.role}</span>
+            <button
+              onClick={() => {
+                if (window.confirm(`Remove ${u.name} (${u.username})? This can't be undone.`)) {
+                  removeUser(u.id);
+                }
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                color: "var(--red)",
+                fontSize: 11,
+                cursor: "pointer",
+                padding: 0,
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
+              }}
+            >
+              Remove
+            </button>
+          </div>
         </div>
       ))}
 
