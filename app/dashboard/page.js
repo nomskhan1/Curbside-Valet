@@ -714,51 +714,60 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
           Registered vehicles will show up here once guests add them.
         </div>
       ) : (
-        visibleGroups.map((groupName) => (
-          <div key={groupName} style={{ marginBottom: 22 }}>
-            <div
-              style={{
-                fontSize: 12,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                color: "var(--brass-light)",
-                marginBottom: 8,
-                marginTop: 8,
-              }}
-            >
-              {groupName} ({grouped[groupName].length})
-            </div>
-            {grouped[groupName].map((v) => (
-              <div key={v.id} className="queue-item">
-                <div className="queue-num">#{v.ticketNumber}</div>
-                <div className="queue-info">
-                  <div className="car">
-                    {vehicleLabel(v)}
-                    {v.isVisitor && (
-                      <span
-                        style={{
-                          marginLeft: 8,
-                          fontSize: 10,
-                          padding: "2px 7px",
-                          borderRadius: 10,
-                          border: "1px solid var(--line)",
-                          color: "var(--slate2)",
-                          textTransform: "uppercase",
-                          letterSpacing: "0.06em",
-                        }}
-                      >
-                        Visitor
-                      </span>
-                    )}
-                  </div>
-                  <div className="meta">
-                    {v.licensePlate || "No plate on file"} · owner: {v.owner?.name} ({v.owner?.username})
-                  </div>
-                </div>
+        visibleGroups.map((groupName) => {
+          const groupVehicles = grouped[groupName] || [];
+          return (
+            <div key={groupName} style={{ marginBottom: 22 }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "var(--brass-light)",
+                  marginBottom: 8,
+                  marginTop: 8,
+                }}
+              >
+                {groupName} ({groupVehicles.length})
               </div>
-            ))}
-          </div>
-        ))
+              {groupVehicles.length === 0 ? (
+                <div className="empty-state" style={{ padding: "20px 0" }}>
+                  No vehicles registered at this building yet.
+                </div>
+              ) : (
+                groupVehicles.map((v) => (
+                  <div key={v.id} className="queue-item">
+                    <div className="queue-num">#{v.ticketNumber}</div>
+                    <div className="queue-info">
+                      <div className="car">
+                        {vehicleLabel(v)}
+                        {v.isVisitor && (
+                          <span
+                            style={{
+                              marginLeft: 8,
+                              fontSize: 10,
+                              padding: "2px 7px",
+                              borderRadius: 10,
+                              border: "1px solid var(--line)",
+                              color: "var(--slate2)",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.06em",
+                            }}
+                          >
+                            Visitor
+                          </span>
+                        )}
+                      </div>
+                      <div className="meta">
+                        {v.licensePlate || "No plate on file"} · owner: {v.owner?.name} ({v.owner?.username})
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          );
+        })
       )}
     </>
   );
