@@ -24,6 +24,7 @@ export default function Dashboard() {
   const [user, setUser] = useState(undefined); // undefined = loading, null = signed out
   const [tab, setTab] = useState("queue"); // staff/admin: "queue" | "users" (admin only)
   const [showPasswordPanel, setShowPasswordPanel] = useState(false);
+  const [vehiclesFilterBuilding, setVehiclesFilterBuilding] = useState("all");
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -60,7 +61,13 @@ export default function Dashboard() {
       <main>
         {user.role === "GUEST" && <GuestView user={user} />}
         {(user.role === "STAFF" || user.role === "ADMIN") && (
-          <StaffView user={user} tab={tab} setTab={setTab} />
+          <StaffView
+            user={user}
+            tab={tab}
+            setTab={setTab}
+            vehiclesFilterBuilding={vehiclesFilterBuilding}
+            setVehiclesFilterBuilding={setVehiclesFilterBuilding}
+          />
         )}
 
         {showPasswordPanel && <ChangePasswordPanel onClose={() => setShowPasswordPanel(false)} />}
@@ -452,7 +459,7 @@ function playAlertBeep(ctx) {
   });
 }
 
-function StaffView({ user, tab, setTab }) {
+function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilterBuilding }) {
   const [requests, setRequests] = useState([]);
   const [alertsEnabled, setAlertsEnabled] = useState(false);
   const audioCtxRef = useRef(null);
@@ -628,9 +635,21 @@ function StaffView({ user, tab, setTab }) {
 
       {tab === "history" && user.role === "ADMIN" && <HistoryView />}
 
-      {tab === "vehicles" && user.role === "ADMIN" && <VehiclesView />}
+      {tab === "vehicles" && user.role === "ADMIN" && (
+        <VehiclesView
+          filterBuilding={vehiclesFilterBuilding}
+          setFilterBuilding={setVehiclesFilterBuilding}
+        />
+      )}
 
-      {tab === "buildings" && user.role === "ADMIN" && <BuildingsView />}
+      {tab === "buildings" && user.role === "ADMIN" && (
+        <BuildingsView
+          onSelectBuilding={(name) => {
+            setVehiclesFilterBuilding(name);
+            setTab("vehicles");
+          }}
+        />
+      )}
 
       {tab === "users" && user.role === "ADMIN" && <UserAdmin />}
     </>
@@ -638,10 +657,9 @@ function StaffView({ user, tab, setTab }) {
 }
 
 // ---------------- ADMIN: VEHICLES ----------------
-function VehiclesView() {
+function VehiclesView({ filterBuilding, setFilterBuilding }) {
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filterBuilding, setFilterBuilding] = useState("all");
 
   const load = useCallback(async () => {
     const res = await fetch("/api/vehicles");
@@ -747,7 +765,7 @@ function VehiclesView() {
 }
 
 // ---------------- ADMIN: BUILDINGS ----------------
-function BuildingsView() {
+function BuildingsView({ onSelectBuilding }) {
   const [buildings, setBuildings] = useState([]);
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -811,10 +829,18 @@ function BuildingsView() {
 
       {buildings.map((b) => (
         <div key={b.id} className="queue-item">
-          <div className="queue-info">
+          <div
+            className="queue-info"
+            onClick={() => onSelectBuilding && onSelectBuilding(b.name)}
+            style={{ cursor: onSelectBuilding ? "pointer" : "default" }}
+            title="View vehicles registered at this building"
+          >
             <div className="car">{b.name}</div>
             <div className="meta">
-              {b.address || "No address on file"} · {b._count?.users ?? 0} accounts · {b._count?.vehicles ?? 0} vehicles
+              {b.address || "No address on file"} · {b._count?.users ?? 0} accounts ·{" "}
+              <span style={{ color: "var(--brass-light)", textDecoration: "underline" }}>
+                {b._count?.vehicles ?? 0} vehicles
+              </span>
             </div>
           </div>
           <div className="queue-actions">
