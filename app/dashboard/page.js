@@ -823,6 +823,8 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
   const [photoPreview, setPhotoPreview] = useState(null);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [photoUrl, setPhotoUrl] = useState(null);
+  const cameraInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
 
   const load = useCallback(async () => {
     const [vRes, uRes] = await Promise.all([fetch("/api/vehicles"), fetch("/api/admin/users")]);
@@ -977,7 +979,39 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
           </div>
           <div className="field">
             <label>Photo (optional)</label>
-            <input type="file" accept="image/*" onChange={handlePhotoSelect} />
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ flex: 1 }}
+                onClick={() => cameraInputRef.current?.click()}
+              >
+                📷 Take Photo
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ flex: 1 }}
+                onClick={() => galleryInputRef.current?.click()}
+              >
+                🖼️ Choose Photo
+              </button>
+            </div>
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handlePhotoSelect}
+              style={{ display: "none" }}
+            />
+            <input
+              ref={galleryInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handlePhotoSelect}
+              style={{ display: "none" }}
+            />
             {photoUploading && (
               <p style={{ fontSize: 12, color: "var(--slate2)", marginTop: 6 }}>Uploading...</p>
             )}
@@ -1384,6 +1418,8 @@ function UserAdmin({ currentUser }) {
   const [photoPreview, setPhotoPreview] = useState(null);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [photoUrl, setPhotoUrl] = useState(null);
+  const cameraInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
 
   const load = useCallback(async () => {
     const requests = [fetch("/api/admin/users")];
@@ -1641,7 +1677,39 @@ function UserAdmin({ currentUser }) {
               </div>
               <div className="field">
                 <label>Photo (optional)</label>
-                <input type="file" accept="image/*" onChange={handlePhotoSelect} />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{ flex: 1 }}
+                    onClick={() => cameraInputRef.current?.click()}
+                  >
+                    📷 Take Photo
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{ flex: 1 }}
+                    onClick={() => galleryInputRef.current?.click()}
+                  >
+                    🖼️ Choose Photo
+                  </button>
+                </div>
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handlePhotoSelect}
+                  style={{ display: "none" }}
+                />
+                <input
+                  ref={galleryInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoSelect}
+                  style={{ display: "none" }}
+                />
                 {photoUploading && (
                   <p style={{ fontSize: 12, color: "var(--slate2)", marginTop: 6 }}>Uploading...</p>
                 )}
