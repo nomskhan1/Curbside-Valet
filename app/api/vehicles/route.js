@@ -39,7 +39,7 @@ async function POST(req) {
   }
 
   const body = await req.json();
-  const { make, model, color, licensePlate, ticketNumber, ownerId } = body || {};
+  const { make, model, color, licensePlate, ticketNumber, ownerId, fuelType } = body || {};
 
   if (!make || !model || !ticketNumber || !ownerId) {
     return new Response(
@@ -47,6 +47,9 @@ async function POST(req) {
       { status: 400 }
     );
   }
+
+  const VALID_FUEL_TYPES = ["GASOLINE", "ELECTRIC", "PLUGIN_HYBRID"];
+  const resolvedFuelType = VALID_FUEL_TYPES.includes(fuelType) ? fuelType : "GASOLINE";
 
   const owner = await prisma.user.findUnique({ where: { id: ownerId } });
   if (!owner) {
@@ -77,6 +80,7 @@ async function POST(req) {
       ticketNumber,
       ownerId: owner.id,
       buildingId: owner.buildingId || null,
+      fuelType: resolvedFuelType,
     },
   });
 

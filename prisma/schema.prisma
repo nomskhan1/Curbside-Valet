@@ -13,7 +13,7 @@ datasource db {
 // Note: role/status/type are plain strings (not native enums) for portability.
 // Valid values are enforced in application code
 // (see lib/auth.js and the API routes in app/api/).
-// role:   "GUEST" | "STAFF" | "ADMIN"
+// role:   "GUEST" | "STAFF" | "MANAGER" | "ADMIN"
 // status: "WAITING" | "PULLING" | "READY" | "COMPLETED" | "CANCELLED"
 // type:   "PICKUP" | "CHARGE"
 
@@ -43,6 +43,16 @@ model User {
   vehicles        Vehicle[]
   requests        Request[] @relation("RequestedBy")
   handledRequests Request[] @relation("HandledBy")
+  pushTokens      PushToken[]
+}
+
+model PushToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  token     String   @unique
+  platform  String   @default("android") // "android" | "ios"
+  createdAt DateTime @default(now())
 }
 
 model Vehicle {
@@ -59,6 +69,10 @@ model Vehicle {
   // True when this vehicle was registered on the fly by a resident
   // requesting pickup for a visitor's car, rather than their own.
   isVisitor Boolean @default(false)
+
+  // "GASOLINE" | "ELECTRIC" | "PLUGIN_HYBRID" — determines whether the
+  // charging request option is available for this vehicle.
+  fuelType String @default("GASOLINE")
 
   // Denormalized from the owner's building at creation time, so queue
   // queries can filter by building without an extra join.

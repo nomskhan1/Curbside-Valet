@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { registerForPushNotifications } from "../../lib/push-client";
 
 const STATUS_LABEL = {
   WAITING: "Waiting in queue",
@@ -214,6 +215,10 @@ function GuestView({ user }) {
     const id = setInterval(load, 3000);
     return () => clearInterval(id);
   }, [load]);
+
+  useEffect(() => {
+    registerForPushNotifications();
+  }, []);
 
   // Pickup and charging requests are independent of each other — a guest
   // can have both active at once, so they're tracked separately.
@@ -476,7 +481,11 @@ function GuestView({ user }) {
       ) : (
         <>
           {vehicles
-            .filter((v) => !activeChargeRequests.some((r) => r.vehicleId === v.id))
+            .filter(
+              (v) =>
+                (v.fuelType === "ELECTRIC" || v.fuelType === "PLUGIN_HYBRID") &&
+                !activeChargeRequests.some((r) => r.vehicleId === v.id)
+            )
             .map((v) => (
               <div key={v.id} className="queue-item">
                 <div className="queue-num">#{v.ticketNumber}</div>
@@ -491,6 +500,12 @@ function GuestView({ user }) {
                 </div>
               </div>
             ))}
+          {vehicles.length > 0 &&
+            vehicles.every((v) => v.fuelType !== "ELECTRIC" && v.fuelType !== "PLUGIN_HYBRID") && (
+              <p style={{ fontSize: 13, color: "var(--slate2)", marginBottom: 10 }}>
+                None of your registered vehicles are marked as electric or plug-in hybrid.
+              </p>
+            )}
           <button className="btn btn-ghost" onClick={() => setShowChargeForm(true)} style={{ marginTop: 10 }}>
             Request charging by ticket number
           </button>
@@ -789,6 +804,7 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
       color: form.color.value,
       licensePlate: form.licensePlate.value,
       ticketNumber: form.ticketNumber.value,
+      fuelType: form.fuelType.value,
     };
     const res = await fetch("/api/vehicles", {
       method: "POST",
@@ -875,6 +891,14 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
             <input name="licensePlate" />
           </div>
           <div className="field">
+            <label>Vehicle type</label>
+            <select name="fuelType" defaultValue="GASOLINE">
+              <option value="GASOLINE">Gasoline</option>
+              <option value="ELECTRIC">Electric</option>
+              <option value="PLUGIN_HYBRID">Plug-in Hybrid</option>
+            </select>
+          </div>
+          <div className="field">
             <label>Ticket number</label>
             <input name="ticketNumber" required />
           </div>
@@ -952,6 +976,22 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
                             }}
                           >
                             Visitor
+                          </span>
+                        )}
+                        {(v.fuelType === "ELECTRIC" || v.fuelType === "PLUGIN_HYBRID") && (
+                          <span
+                            style={{
+                              marginLeft: 8,
+                              fontSize: 10,
+                              padding: "2px 7px",
+                              borderRadius: 10,
+                              border: "1px solid var(--brass)",
+                              color: "var(--brass-light)",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.06em",
+                            }}
+                          >
+                            ⚡ {v.fuelType === "ELECTRIC" ? "Electric" : "Plug-in Hybrid"}
                           </span>
                         )}
                       </div>
@@ -1278,6 +1318,7 @@ function UserAdmin({ currentUser }) {
         color: form.vehicleColor.value,
         licensePlate: form.vehicleLicensePlate.value,
         ticketNumber: form.vehicleTicketNumber.value,
+        fuelType: form.vehicleFuelType.value,
       };
       const vRes = await fetch("/api/vehicles", {
         method: "POST",
@@ -1441,6 +1482,14 @@ function UserAdmin({ currentUser }) {
               <div className="field">
                 <label>License plate</label>
                 <input name="vehicleLicensePlate" />
+              </div>
+              <div className="field">
+                <label>Vehicle type</label>
+                <select name="vehicleFuelType" defaultValue="GASOLINE">
+                  <option value="GASOLINE">Gasoline</option>
+                  <option value="ELECTRIC">Electric</option>
+                  <option value="PLUGIN_HYBRID">Plug-in Hybrid</option>
+                </select>
               </div>
               <div className="field">
                 <label>Ticket number</label>

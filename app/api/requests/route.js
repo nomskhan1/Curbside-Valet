@@ -95,6 +95,14 @@ async function POST(req) {
     );
   }
 
+  // Charging only makes sense for electric or plug-in hybrid vehicles.
+  if (requestType === "CHARGE" && vehicle.fuelType === "GASOLINE") {
+    return new Response(
+      JSON.stringify({ error: "This vehicle isn't marked as electric or plug-in hybrid, so charging isn't available for it." }),
+      { status: 400 }
+    );
+  }
+
   // Avoid duplicate active requests of the SAME type for the same vehicle.
   // A pickup and a charge request can both be active at once — they're
   // independent of each other.
