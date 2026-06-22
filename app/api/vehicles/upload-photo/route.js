@@ -1,5 +1,5 @@
 const { put } = require("@vercel/blob");
-const { getSessionFromRequest } = require("../../../lib/auth");
+const { getSessionFromRequest } = require("../../../../lib/auth");
 
 // Accepts a base64 data URL (already resized/compressed client-side) and
 // uploads it to Vercel Blob storage. Returns the public URL to save on the
