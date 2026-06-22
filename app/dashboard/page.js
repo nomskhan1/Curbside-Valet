@@ -1232,6 +1232,7 @@ function UserAdmin({ currentUser }) {
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [role, setRole] = useState("GUEST");
+  const [addVehicleNow, setAddVehicleNow] = useState(false);
 
   const load = useCallback(async () => {
     const requests = [fetch("/api/admin/users")];
@@ -1266,9 +1267,40 @@ function UserAdmin({ currentUser }) {
       setError(data.error);
       return;
     }
+
+    // If this is a guest and "add a vehicle now" was checked, register the
+    // vehicle right away using the new account's id as the owner.
+    if (body.role === "GUEST" && addVehicleNow) {
+      const vBody = {
+        ownerId: data.id,
+        make: form.vehicleMake.value,
+        model: form.vehicleModel.value,
+        color: form.vehicleColor.value,
+        licensePlate: form.vehicleLicensePlate.value,
+        ticketNumber: form.vehicleTicketNumber.value,
+      };
+      const vRes = await fetch("/api/vehicles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(vBody),
+      });
+      if (!vRes.ok) {
+        const vData = await vRes.json();
+        setError(
+          `Account created, but the vehicle couldn't be added: ${vData.error}. You can add it from the Vehicles tab instead.`
+        );
+        setShowForm(false);
+        setRole("GUEST");
+        setAddVehicleNow(false);
+        load();
+        return;
+      }
+    }
+
     form.reset();
     setShowForm(false);
     setRole("GUEST");
+    setAddVehicleNow(false);
     load();
   }
 
@@ -1376,10 +1408,59 @@ function UserAdmin({ currentUser }) {
               This account will automatically be assigned to your building.
             </p>
           )}
+
+          {role === "GUEST" && (
+            <div className="field">
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={addVehicleNow}
+                  onChange={(e) => setAddVehicleNow(e.target.checked)}
+                  style={{ width: "auto" }}
+                />
+                Add a vehicle for this guest now
+              </label>
+            </div>
+          )}
+
+          {role === "GUEST" && addVehicleNow && (
+            <>
+              <div className="stub-divider" style={{ margin: "16px 0" }}></div>
+              <div className="field">
+                <label>Make</label>
+                <input name="vehicleMake" required />
+              </div>
+              <div className="field">
+                <label>Model</label>
+                <input name="vehicleModel" required />
+              </div>
+              <div className="field">
+                <label>Color</label>
+                <input name="vehicleColor" />
+              </div>
+              <div className="field">
+                <label>License plate</label>
+                <input name="vehicleLicensePlate" />
+              </div>
+              <div className="field">
+                <label>Ticket number</label>
+                <input name="vehicleTicketNumber" required />
+              </div>
+              <div className="stub-divider" style={{ margin: "16px 0" }}></div>
+            </>
+          )}
+
           <button className="btn btn-primary" type="submit">
             Create account
           </button>
-          <button className="btn btn-ghost" type="button" onClick={() => setShowForm(false)}>
+          <button
+            className="btn btn-ghost"
+            type="button"
+            onClick={() => {
+              setShowForm(false);
+              setAddVehicleNow(false);
+            }}
+          >
             Cancel
           </button>
         </form>
