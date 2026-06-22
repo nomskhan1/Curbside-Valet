@@ -30,12 +30,33 @@ async function GET(req) {
 
 async function POST(req) {
   const session = getSessionFromRequest(req);
-  if (!session || session.role !== "ADMIN") {
-    return new Response(JSON.stringify({ error: "Admin access required." }), { status: 403 });
+  if (!session || (session.role !== "ADMIN" && session.role !== "MANAGER")) {
+    return new Response(JSON.stringify({ error: "Admin or manager access required." }), {
+      status: 403,
+    });
   }
 
   const body = await req.json();
-  const { username, password, name, role, buildingId } = body || {};
+  const { username, password, name } = body || {};
+  let { role, buildingId } = body || {};
+
+  // A manager can only create guest or staff accounts, and only for their
+  // own building — admin and manager accounts stay admin-only to create.
+  if (session.role === "MANAGER") {
+    if (!["GUEST", "STAFF"].includes(role)) {
+      return new Response(
+        JSON.stringify({ error: "Managers can only create guest or staff accounts." }),
+        { status: 403 }
+      );
+    }
+    buildingId = session.buildingId;
+    if (!buildingId) {
+      return new Response(
+        JSON.stringify({ error: "Your account isn't assigned to a building." }),
+        { status: 400 }
+      );
+    }
+  }
 
   if (!username || !password || !name || !["GUEST", "STAFF", "MANAGER", "ADMIN"].includes(role)) {
     return new Response(JSON.stringify({ error: "Name, username, password, and a valid role are required." }), {

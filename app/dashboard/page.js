@@ -633,6 +633,9 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
           <button className={tab === "vehicles" ? "active" : ""} onClick={() => setTab("vehicles")}>
             Vehicles
           </button>
+          <button className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}>
+            Users
+          </button>
         </div>
       )}
 
@@ -749,7 +752,9 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
         />
       )}
 
-      {tab === "users" && user.role === "ADMIN" && <UserAdmin />}
+      {tab === "users" && (user.role === "ADMIN" || user.role === "MANAGER") && (
+        <UserAdmin currentUser={user} />
+      )}
     </>
   );
 }
@@ -1219,22 +1224,22 @@ function HistoryView() {
   );
 }
 
-// ---------------- ADMIN: USERS ----------------
-function UserAdmin() {
+// ---------------- ADMIN / MANAGER: USERS ----------------
+function UserAdmin({ currentUser }) {
+  const isManager = currentUser?.role === "MANAGER";
   const [users, setUsers] = useState([]);
   const [buildings, setBuildings] = useState([]);
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
-  const [role, setRole] = useState("STAFF");
+  const [role, setRole] = useState("GUEST");
 
   const load = useCallback(async () => {
-    const [uRes, bRes] = await Promise.all([
-      fetch("/api/admin/users"),
-      fetch("/api/admin/buildings"),
-    ]);
-    if (uRes.ok) setUsers(await uRes.json());
-    if (bRes.ok) setBuildings(await bRes.json());
-  }, []);
+    const requests = [fetch("/api/admin/users")];
+    if (!isManager) requests.push(fetch("/api/admin/buildings"));
+    const results = await Promise.all(requests);
+    if (results[0].ok) setUsers(await results[0].json());
+    if (!isManager && results[1]?.ok) setBuildings(await results[1].json());
+  }, [isManager]);
 
   useEffect(() => {
     load();
@@ -1263,7 +1268,7 @@ function UserAdmin() {
     }
     form.reset();
     setShowForm(false);
-    setRole("STAFF");
+    setRole("GUEST");
     load();
   }
 
@@ -1282,7 +1287,7 @@ function UserAdmin() {
     <>
       <div className="queue-header">
         <h1 className="title" style={{ marginBottom: 2 }}>
-          Team & guests
+          {isManager ? "Guests & staff" : "Team & guests"}
         </h1>
         <span className="count-badge">{users.length} accounts</span>
       </div>
@@ -1299,29 +1304,31 @@ function UserAdmin() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span className="role-tag">{u.role}</span>
-            <button
-              onClick={() => {
-                if (
-                  window.confirm(
-                    `Remove ${u.name} (${u.username})? This will also permanently delete any vehicles and request history tied to this account. This can't be undone.`
-                  )
-                ) {
-                  removeUser(u.id);
-                }
-              }}
-              style={{
-                background: "none",
-                border: "none",
-                color: "var(--red)",
-                fontSize: 11,
-                cursor: "pointer",
-                padding: 0,
-                textTransform: "uppercase",
-                letterSpacing: "0.04em",
-              }}
-            >
-              Remove
-            </button>
+            {!isManager && (
+              <button
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `Remove ${u.name} (${u.username})? This will also permanently delete any vehicles and request history tied to this account. This can't be undone.`
+                    )
+                  ) {
+                    removeUser(u.id);
+                  }
+                }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--red)",
+                  fontSize: 11,
+                  cursor: "pointer",
+                  padding: 0,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                Remove
+              </button>
+            )}
           </div>
         </div>
       ))}
@@ -1343,13 +1350,13 @@ function UserAdmin() {
           <div className="field">
             <label>Role</label>
             <select name="role" value={role} onChange={(e) => setRole(e.target.value)}>
-              <option value="STAFF">Staff</option>
-              <option value="MANAGER">Manager</option>
-              <option value="ADMIN">Admin</option>
               <option value="GUEST">Guest</option>
+              <option value="STAFF">Staff</option>
+              {!isManager && <option value="MANAGER">Manager</option>}
+              {!isManager && <option value="ADMIN">Admin</option>}
             </select>
           </div>
-          {role !== "ADMIN" && (
+          {!isManager && role !== "ADMIN" && (
             <div className="field">
               <label>Building</label>
               <select name="buildingId" required>
@@ -1364,6 +1371,11 @@ function UserAdmin() {
               </select>
             </div>
           )}
+          {isManager && (
+            <p style={{ fontSize: 12, color: "var(--slate2)", marginTop: -6, marginBottom: 16 }}>
+              This account will automatically be assigned to your building.
+            </p>
+          )}
           <button className="btn btn-primary" type="submit">
             Create account
           </button>
@@ -1373,7 +1385,7 @@ function UserAdmin() {
         </form>
       ) : (
         <button className="btn btn-ghost" onClick={() => setShowForm(true)} style={{ marginTop: 14 }}>
-          + Add staff or admin
+          {isManager ? "+ Add guest or staff" : "+ Add staff or admin"}
         </button>
       )}
     </>
