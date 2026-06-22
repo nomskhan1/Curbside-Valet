@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { registerForPushNotifications } from "../../lib/push-client";
 
 const STATUS_LABEL = {
   WAITING: "Waiting in queue",
@@ -215,10 +214,6 @@ function GuestView({ user }) {
     const id = setInterval(load, 3000);
     return () => clearInterval(id);
   }, [load]);
-
-  useEffect(() => {
-    registerForPushNotifications();
-  }, []);
 
   // Pickup and charging requests are independent of each other — a guest
   // can have both active at once, so they're tracked separately.
