@@ -8,8 +8,8 @@ async function GET(req) {
   let where;
   if (session.role === "GUEST") {
     where = { requestedById: session.id };
-  } else if (session.role === "STAFF") {
-    // Staff only see the active queue for their own building.
+  } else if (session.role === "STAFF" || session.role === "MANAGER") {
+    // Staff and managers only see the active queue for their own building.
     where = {
       status: { in: ["WAITING", "PULLING", "READY"] },
       vehicle: { buildingId: session.buildingId || "__none__" }, // no buildingId = sees nothing, not everything

@@ -24,11 +24,11 @@ async function PATCH(req, { params }) {
   }
 
   const isOwner = existing.requestedById === session.id;
-  const isStaff = session.role === "STAFF" || session.role === "ADMIN";
+  const isStaff = session.role === "STAFF" || session.role === "MANAGER" || session.role === "ADMIN";
 
-  // Staff (not admin) can only act on requests from their own building.
+  // Staff and managers (not admin) can only act on requests from their own building.
   if (
-    session.role === "STAFF" &&
+    (session.role === "STAFF" || session.role === "MANAGER") &&
     existing.vehicle.buildingId &&
     existing.vehicle.buildingId !== session.buildingId
   ) {

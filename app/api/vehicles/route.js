@@ -8,7 +8,7 @@ async function GET(req) {
   let where;
   if (session.role === "GUEST") {
     where = { ownerId: session.id };
-  } else if (session.role === "STAFF") {
+  } else if (session.role === "STAFF" || session.role === "MANAGER") {
     where = { buildingId: session.buildingId || "__none__" };
   } else {
     where = {}; // ADMIN sees every building
@@ -30,13 +30,34 @@ async function POST(req) {
   const session = getSessionFromRequest(req);
   if (!session) return new Response(JSON.stringify({ error: "Not signed in." }), { status: 401 });
 
-  const body = await req.json();
-  const { make, model, color, licensePlate, ticketNumber } = body || {};
+  // Only an admin or a building manager can register vehicles — guests no
+  // longer self-register; their vehicles are added for them.
+  if (session.role !== "ADMIN" && session.role !== "MANAGER") {
+    return new Response(JSON.stringify({ error: "Only an admin or manager can add a vehicle." }), {
+      status: 403,
+    });
+  }
 
-  if (!make || !model || !ticketNumber) {
+  const body = await req.json();
+  const { make, model, color, licensePlate, ticketNumber, ownerId } = body || {};
+
+  if (!make || !model || !ticketNumber || !ownerId) {
     return new Response(
-      JSON.stringify({ error: "Make, model, and ticket number are required." }),
+      JSON.stringify({ error: "Owner, make, model, and ticket number are required." }),
       { status: 400 }
+    );
+  }
+
+  const owner = await prisma.user.findUnique({ where: { id: ownerId } });
+  if (!owner) {
+    return new Response(JSON.stringify({ error: "Selected user wasn't found." }), { status: 404 });
+  }
+
+  // A manager can only add vehicles for guests in their own building.
+  if (session.role === "MANAGER" && owner.buildingId !== session.buildingId) {
+    return new Response(
+      JSON.stringify({ error: "You can only add vehicles for guests in your own building." }),
+      { status: 403 }
     );
   }
 
@@ -54,8 +75,8 @@ async function POST(req) {
       color: color || null,
       licensePlate: licensePlate || null,
       ticketNumber,
-      ownerId: session.id, // a guest registers their own car
-      buildingId: session.buildingId || null,
+      ownerId: owner.id,
+      buildingId: owner.buildingId || null,
     },
   });
 

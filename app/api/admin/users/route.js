@@ -4,11 +4,16 @@ const { getSessionFromRequest } = require("../../../../lib/auth");
 
 async function GET(req) {
   const session = getSessionFromRequest(req);
-  if (!session || session.role !== "ADMIN") {
-    return new Response(JSON.stringify({ error: "Admin access required." }), { status: 403 });
+  if (!session || (session.role !== "ADMIN" && session.role !== "MANAGER")) {
+    return new Response(JSON.stringify({ error: "Admin or manager access required." }), {
+      status: 403,
+    });
   }
 
+  const where = session.role === "MANAGER" ? { buildingId: session.buildingId || "__none__" } : {};
+
   const users = await prisma.user.findMany({
+    where,
     select: {
       id: true,
       username: true,
@@ -32,15 +37,15 @@ async function POST(req) {
   const body = await req.json();
   const { username, password, name, role, buildingId } = body || {};
 
-  if (!username || !password || !name || !["GUEST", "STAFF", "ADMIN"].includes(role)) {
+  if (!username || !password || !name || !["GUEST", "STAFF", "MANAGER", "ADMIN"].includes(role)) {
     return new Response(JSON.stringify({ error: "Name, username, password, and a valid role are required." }), {
       status: 400,
     });
   }
 
-  // Staff and guest accounts must belong to a building. Admin accounts are
-  // global, so a building is optional for them.
-  if ((role === "STAFF" || role === "GUEST") && !buildingId) {
+  // Staff, manager, and guest accounts must belong to a building. Admin
+  // accounts are global, so a building is optional for them.
+  if (role !== "ADMIN" && !buildingId) {
     return new Response(JSON.stringify({ error: "Please select a building for this account." }), {
       status: 400,
     });

@@ -68,7 +68,7 @@ export default function Dashboard() {
       </header>
       <main>
         {user.role === "GUEST" && <GuestView user={user} />}
-        {(user.role === "STAFF" || user.role === "ADMIN") && (
+        {(user.role === "STAFF" || user.role === "MANAGER" || user.role === "ADMIN") && (
           <StaffView
             user={user}
             tab={tab}
@@ -198,7 +198,6 @@ function GuestView({ user }) {
   const [vehicles, setVehicles] = useState([]);
   const [requests, setRequests] = useState([]);
   const [error, setError] = useState("");
-  const [showAddVehicle, setShowAddVehicle] = useState(false);
   const [showTicketForm, setShowTicketForm] = useState(false);
   const [scheduleMode, setScheduleMode] = useState(false);
   const [scheduledFor, setScheduledFor] = useState("");
@@ -224,32 +223,6 @@ function GuestView({ user }) {
   const activeChargeRequests = requests.filter(
     (r) => r.type === "CHARGE" && ["WAITING", "PULLING", "READY"].includes(r.status)
   );
-
-  async function addVehicle(e) {
-    e.preventDefault();
-    setError("");
-    const form = e.target;
-    const body = {
-      make: form.make.value,
-      model: form.model.value,
-      color: form.color.value,
-      licensePlate: form.licensePlate.value,
-      ticketNumber: form.ticketNumber.value,
-    };
-    const res = await fetch("/api/vehicles", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error);
-      return;
-    }
-    form.reset();
-    setShowAddVehicle(false);
-    load();
-  }
 
   async function submitRequest(payload) {
     setError("");
@@ -375,14 +348,10 @@ function GuestView({ user }) {
   } else {
     pickupSection = (
       <>
-      <div className="hero-line">Heading out?</div>
-      <h1 className="title">Request your car</h1>
-      {error && <div className="error-box">{error}</div>}
-
-      {vehicles.length === 0 && !showAddVehicle && (
+      {vehicles.length === 0 && (
         <div className="empty-state">
           <div className="big">No vehicles yet</div>
-          Add your car's ticket details to request a pickup.
+          Ask your building's front desk or admin to add your vehicle to your account.
         </div>
       )}
 
@@ -424,41 +393,6 @@ function GuestView({ user }) {
           />
         )}
       </div>
-
-      {showAddVehicle ? (
-        <form onSubmit={addVehicle} style={{ marginTop: 18 }}>
-          <div className="field">
-            <label>Make</label>
-            <input name="make" required />
-          </div>
-          <div className="field">
-            <label>Model</label>
-            <input name="model" required />
-          </div>
-          <div className="field">
-            <label>Color</label>
-            <input name="color" />
-          </div>
-          <div className="field">
-            <label>License plate</label>
-            <input name="licensePlate" />
-          </div>
-          <div className="field">
-            <label>Ticket number</label>
-            <input name="ticketNumber" required />
-          </div>
-          <button className="btn btn-primary" type="submit">
-            Save vehicle
-          </button>
-          <button className="btn btn-ghost" type="button" onClick={() => setShowAddVehicle(false)}>
-            Cancel
-          </button>
-        </form>
-      ) : (
-        <button className="btn btn-ghost" onClick={() => setShowAddVehicle(true)} style={{ marginTop: 14 }}>
-          + Add a vehicle
-        </button>
-      )}
 
       <div className="stub-divider" style={{ margin: "22px 0" }}></div>
 
@@ -691,6 +625,17 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
         </div>
       )}
 
+      {user.role === "MANAGER" && (
+        <div className="tabs">
+          <button className={tab === "queue" ? "active" : ""} onClick={() => setTab("queue")}>
+            Queue
+          </button>
+          <button className={tab === "vehicles" ? "active" : ""} onClick={() => setTab("vehicles")}>
+            Vehicles
+          </button>
+        </div>
+      )}
+
       {tab === "queue" && (
         <>
           <div className="queue-header">
@@ -787,10 +732,11 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
 
       {tab === "history" && user.role === "ADMIN" && <HistoryView />}
 
-      {tab === "vehicles" && user.role === "ADMIN" && (
+      {tab === "vehicles" && (user.role === "ADMIN" || user.role === "MANAGER") && (
         <VehiclesView
           filterBuilding={vehiclesFilterBuilding}
           setFilterBuilding={setVehiclesFilterBuilding}
+          currentUser={user}
         />
       )}
 
@@ -811,17 +757,61 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
 // ---------------- ADMIN: VEHICLES ----------------
 function VehiclesView({ filterBuilding, setFilterBuilding }) {
   const [vehicles, setVehicles] = useState([]);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [error, setError] = useState("");
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/vehicles");
-    if (res.ok) setVehicles(await res.json());
+    const [vRes, uRes] = await Promise.all([fetch("/api/vehicles"), fetch("/api/admin/users")]);
+    if (vRes.ok) setVehicles(await vRes.json());
+    if (uRes.ok) setUsers(await uRes.json());
     setLoading(false);
   }, []);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  async function addVehicle(e) {
+    e.preventDefault();
+    setError("");
+    const form = e.target;
+    const body = {
+      ownerId: form.ownerId.value,
+      make: form.make.value,
+      model: form.model.value,
+      color: form.color.value,
+      licensePlate: form.licensePlate.value,
+      ticketNumber: form.ticketNumber.value,
+    };
+    const res = await fetch("/api/vehicles", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error);
+      return;
+    }
+    form.reset();
+    setShowAddForm(false);
+    load();
+  }
+
+  async function removeVehicle(id) {
+    setError("");
+    const res = await fetch(`/api/vehicles/${id}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error);
+      return;
+    }
+    load();
+  }
+
+  const guestUsers = users.filter((u) => u.role === "GUEST");
 
   const buildingNames = Array.from(
     new Set(vehicles.map((v) => v.building?.name || "Unassigned"))
@@ -846,6 +836,56 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
         <span className="count-badge">{vehicles.length} total</span>
       </div>
 
+      {error && <div className="error-box">{error}</div>}
+
+      {showAddForm ? (
+        <form onSubmit={addVehicle} style={{ marginBottom: 22 }}>
+          <div className="field">
+            <label>Owner (guest)</label>
+            <select name="ownerId" required>
+              <option value="" disabled>
+                Select a guest...
+              </option>
+              {guestUsers.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name} ({u.username}){u.building ? ` · ${u.building.name}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>Make</label>
+            <input name="make" required />
+          </div>
+          <div className="field">
+            <label>Model</label>
+            <input name="model" required />
+          </div>
+          <div className="field">
+            <label>Color</label>
+            <input name="color" />
+          </div>
+          <div className="field">
+            <label>License plate</label>
+            <input name="licensePlate" />
+          </div>
+          <div className="field">
+            <label>Ticket number</label>
+            <input name="ticketNumber" required />
+          </div>
+          <button className="btn btn-primary" type="submit">
+            Add vehicle
+          </button>
+          <button className="btn btn-ghost" type="button" onClick={() => setShowAddForm(false)}>
+            Cancel
+          </button>
+        </form>
+      ) : (
+        <button className="btn btn-ghost" onClick={() => setShowAddForm(true)} style={{ marginBottom: 22 }}>
+          + Add a vehicle for a guest
+        </button>
+      )}
+
       {buildingNames.length > 1 && (
         <div className="field">
           <label>Filter by building</label>
@@ -863,7 +903,7 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
       {loading ? null : vehicles.length === 0 ? (
         <div className="empty-state">
           <div className="big">No vehicles yet</div>
-          Registered vehicles will show up here once guests add them.
+          Use "Add a vehicle for a guest" above to register the first one.
         </div>
       ) : (
         visibleGroups.map((groupName) => {
@@ -913,6 +953,18 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
                       <div className="meta">
                         {v.licensePlate || "No plate on file"} · owner: {v.owner?.name} ({v.owner?.username})
                       </div>
+                    </div>
+                    <div className="queue-actions">
+                      <button
+                        className="mini-btn done"
+                        onClick={() => {
+                          if (window.confirm(`Remove vehicle #${v.ticketNumber}? This can't be undone.`)) {
+                            removeVehicle(v.id);
+                          }
+                        }}
+                      >
+                        Remove
+                      </button>
                     </div>
                   </div>
                 ))
@@ -1249,7 +1301,11 @@ function UserAdmin() {
             <span className="role-tag">{u.role}</span>
             <button
               onClick={() => {
-                if (window.confirm(`Remove ${u.name} (${u.username})? This can't be undone.`)) {
+                if (
+                  window.confirm(
+                    `Remove ${u.name} (${u.username})? This will also permanently delete any vehicles and request history tied to this account. This can't be undone.`
+                  )
+                ) {
                   removeUser(u.id);
                 }
               }}
@@ -1288,6 +1344,7 @@ function UserAdmin() {
             <label>Role</label>
             <select name="role" value={role} onChange={(e) => setRole(e.target.value)}>
               <option value="STAFF">Staff</option>
+              <option value="MANAGER">Manager</option>
               <option value="ADMIN">Admin</option>
               <option value="GUEST">Guest</option>
             </select>
