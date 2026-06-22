@@ -36,7 +36,8 @@ async function POST(req) {
   if (!session) return new Response(JSON.stringify({ error: "Not signed in." }), { status: 401 });
 
   const body = await req.json();
-  const { vehicleId, ticketNumber, etaMinutes, scheduledFor } = body || {};
+  const { vehicleId, ticketNumber, etaMinutes, scheduledFor, type } = body || {};
+  const requestType = type === "CHARGE" ? "CHARGE" : "PICKUP";
 
   if (!vehicleId && !ticketNumber) {
     return new Response(JSON.stringify({ error: "vehicleId or ticketNumber is required." }), {
@@ -94,14 +95,26 @@ async function POST(req) {
     );
   }
 
-  // Avoid duplicate active requests for the same vehicle.
+  // Avoid duplicate active requests of the SAME type for the same vehicle.
+  // A pickup and a charge request can both be active at once — they're
+  // independent of each other.
   const activeExisting = await prisma.request.findFirst({
-    where: { vehicleId: vehicle.id, status: { in: ["WAITING", "PULLING", "READY"] } },
+    where: {
+      vehicleId: vehicle.id,
+      type: requestType,
+      status: { in: ["WAITING", "PULLING", "READY"] },
+    },
   });
   if (activeExisting) {
-    return new Response(JSON.stringify({ error: "There's already an active request for this car." }), {
-      status: 409,
-    });
+    return new Response(
+      JSON.stringify({
+        error:
+          requestType === "CHARGE"
+            ? "There's already an active charging request for this car."
+            : "There's already an active pickup request for this car.",
+      }),
+      { status: 409 }
+    );
   }
 
   let scheduledForDate = null;
@@ -123,6 +136,7 @@ async function POST(req) {
       requestedById: session.id,
       etaMinutes: etaMinutes ?? 0,
       status: "WAITING",
+      type: requestType,
       scheduledFor: scheduledForDate,
     },
     include: { vehicle: true },

@@ -10,6 +10,14 @@ const STATUS_LABEL = {
   CANCELLED: "Cancelled",
 };
 
+const CHARGE_STATUS_LABEL = {
+  WAITING: "Charging requested",
+  PULLING: "Charging in progress",
+  READY: "Charging complete",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
+};
+
 // Visitor cars created with just a ticket number won't have make/model on
 // file yet — fall back to a generic label instead of showing blank space.
 function vehicleLabel(vehicle) {
@@ -194,6 +202,7 @@ function GuestView({ user }) {
   const [showTicketForm, setShowTicketForm] = useState(false);
   const [scheduleMode, setScheduleMode] = useState(false);
   const [scheduledFor, setScheduledFor] = useState("");
+  const [showChargeForm, setShowChargeForm] = useState(false);
 
   const load = useCallback(async () => {
     const [vRes, rRes] = await Promise.all([fetch("/api/vehicles"), fetch("/api/requests")]);
@@ -207,9 +216,14 @@ function GuestView({ user }) {
     return () => clearInterval(id);
   }, [load]);
 
-  // "Active" includes scheduled-for-later requests too, so a guest can't
-  // queue up two pickups at once and so they see the scheduled stub.
-  const activeRequest = requests.find((r) => ["WAITING", "PULLING", "READY"].includes(r.status));
+  // Pickup and charging requests are independent of each other — a guest
+  // can have both active at once, so they're tracked separately.
+  const activeRequest = requests.find(
+    (r) => r.type !== "CHARGE" && ["WAITING", "PULLING", "READY"].includes(r.status)
+  );
+  const activeChargeRequests = requests.filter(
+    (r) => r.type === "CHARGE" && ["WAITING", "PULLING", "READY"].includes(r.status)
+  );
 
   async function addVehicle(e) {
     e.preventDefault();
@@ -263,6 +277,41 @@ function GuestView({ user }) {
     submitRequest({ vehicleId });
   }
 
+  async function requestCharge(vehicleId) {
+    setError("");
+    const res = await fetch("/api/requests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ vehicleId, type: "CHARGE" }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error);
+      return;
+    }
+    setShowChargeForm(false);
+    load();
+  }
+
+  async function requestChargeByTicket(e) {
+    e.preventDefault();
+    const ticketNumber = e.target.ticketNumber.value.trim();
+    if (!ticketNumber) return;
+    setError("");
+    const res = await fetch("/api/requests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ticketNumber, type: "CHARGE" }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error);
+      return;
+    }
+    setShowChargeForm(false);
+    load();
+  }
+
   async function requestByTicket(e) {
     e.preventDefault();
     const ticketNumber = e.target.ticketNumber.value.trim();
@@ -279,9 +328,10 @@ function GuestView({ user }) {
     load();
   }
 
+  let pickupSection;
   if (activeRequest) {
     const isFuture = activeRequest.scheduledFor && new Date(activeRequest.scheduledFor) > new Date();
-    return (
+    pickupSection = (
       <>
         <div className="hero-line">Ticket received</div>
         <h1 className="title">{isFuture ? "Pickup scheduled" : "We're on it"}</h1>
@@ -322,10 +372,9 @@ function GuestView({ user }) {
         )}
       </>
     );
-  }
-
-  return (
-    <>
+  } else {
+    pickupSection = (
+      <>
       <div className="hero-line">Heading out?</div>
       <h1 className="title">Request your car</h1>
       {error && <div className="error-box">{error}</div>}
@@ -342,7 +391,7 @@ function GuestView({ user }) {
           <div className="queue-num">#{v.ticketNumber}</div>
           <div className="queue-info">
             <div className="car">
-              {v.color} {v.make} {v.model}
+              {vehicleLabel(v)}
             </div>
             <div className="meta">{v.licensePlate || "No plate on file"}</div>
           </div>
@@ -434,6 +483,92 @@ function GuestView({ user }) {
           Request a visitor's car instead
         </button>
       )}
+      </>
+    );
+  }
+
+  const chargeSection = (
+    <>
+      <div className="stub-divider" style={{ margin: "26px 0" }}></div>
+      <div className="hero-line">Plugged in but parked</div>
+      <h1 className="title" style={{ fontSize: 22 }}>
+        Request charging
+      </h1>
+
+      {activeChargeRequests.length > 0 && (
+        <>
+          {activeChargeRequests.map((r) => (
+            <div key={r.id} className="stub" style={{ marginBottom: 12 }}>
+              <div className="stub-top">
+                <div>
+                  <div className="stub-num-label">Ticket</div>
+                  <div className="stub-num" style={{ fontSize: 28 }}>
+                    {r.vehicle.ticketNumber}
+                  </div>
+                </div>
+                <span className={`status-pill status-${r.status}`}>
+                  <span className="dot"></span>
+                  {CHARGE_STATUS_LABEL[r.status]}
+                </span>
+              </div>
+              <div className="stub-divider"></div>
+              <div className="stub-row">
+                <span>Vehicle</span>
+                <span>{vehicleLabel(r.vehicle)}</span>
+              </div>
+              {r.status === "WAITING" && (
+                <button className="btn btn-ghost" style={{ marginTop: 10 }} onClick={() => cancel(r.id)}>
+                  Cancel charging request
+                </button>
+              )}
+            </div>
+          ))}
+        </>
+      )}
+
+      {showChargeForm ? (
+        <form onSubmit={requestChargeByTicket}>
+          <div className="field">
+            <label>Ticket number</label>
+            <input name="ticketNumber" placeholder="e.g. 042" required />
+          </div>
+          <button className="btn btn-primary" type="submit">
+            Request charging
+          </button>
+          <button className="btn btn-ghost" type="button" onClick={() => setShowChargeForm(false)}>
+            Cancel
+          </button>
+        </form>
+      ) : (
+        <>
+          {vehicles
+            .filter((v) => !activeChargeRequests.some((r) => r.vehicleId === v.id))
+            .map((v) => (
+              <div key={v.id} className="queue-item">
+                <div className="queue-num">#{v.ticketNumber}</div>
+                <div className="queue-info">
+                  <div className="car">{vehicleLabel(v)}</div>
+                  <div className="meta">{v.licensePlate || "No plate on file"}</div>
+                </div>
+                <div className="queue-actions">
+                  <button className="mini-btn start" onClick={() => requestCharge(v.id)}>
+                    ⚡ Charge
+                  </button>
+                </div>
+              </div>
+            ))}
+          <button className="btn btn-ghost" onClick={() => setShowChargeForm(true)} style={{ marginTop: 10 }}>
+            Request charging by ticket number
+          </button>
+        </>
+      )}
+    </>
+  );
+
+  return (
+    <>
+      {pickupSection}
+      {chargeSection}
     </>
   );
 }
@@ -595,10 +730,27 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
                           Visitor
                         </span>
                       )}
+                      {r.type === "CHARGE" && (
+                        <span
+                          style={{
+                            marginLeft: 8,
+                            fontSize: 10,
+                            padding: "2px 7px",
+                            borderRadius: 10,
+                            border: "1px solid var(--brass)",
+                            color: "var(--brass-light)",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.06em",
+                          }}
+                        >
+                          ⚡ Charging
+                        </span>
+                      )}
                     </div>
                     <div className="meta">
                       {r.requestedBy.name}
-                      {r.vehicle.building ? ` · ${r.vehicle.building.name}` : ""} · {STATUS_LABEL[r.status]}
+                      {r.vehicle.building ? ` · ${r.vehicle.building.name}` : ""} ·{" "}
+                      {r.type === "CHARGE" ? CHARGE_STATUS_LABEL[r.status] : STATUS_LABEL[r.status]}
                       {isFuture && (
                         <span style={{ color: "var(--brass-light)", marginLeft: 6 }}>
                           · scheduled {new Date(r.scheduledFor).toLocaleString()}
@@ -612,12 +764,12 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
                   <div className="queue-actions">
                     {r.status === "WAITING" && (
                       <button className="mini-btn start" onClick={() => advance(r.id, "PULLING")}>
-                        Start pull
+                        {r.type === "CHARGE" ? "Start charging" : "Start pull"}
                       </button>
                     )}
                     {r.status === "PULLING" && (
                       <button className="mini-btn ready" onClick={() => advance(r.id, "READY")}>
-                        Mark ready
+                        {r.type === "CHARGE" ? "Mark charged" : "Mark ready"}
                       </button>
                     )}
                     {r.status === "READY" && (
@@ -890,12 +1042,19 @@ function BuildingsView({ onSelectBuilding }) {
 function HistoryView() {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/requests/history");
+    setLoading(true);
+    const params = new URLSearchParams();
+    if (fromDate) params.set("from", fromDate);
+    if (toDate) params.set("to", toDate);
+    const qs = params.toString();
+    const res = await fetch(`/api/requests/history${qs ? `?${qs}` : ""}`);
     if (res.ok) setHistory(await res.json());
     setLoading(false);
-  }, []);
+  }, [fromDate, toDate]);
 
   useEffect(() => {
     load();
@@ -913,6 +1072,29 @@ function HistoryView() {
           Request history
         </h1>
         <span className="count-badge">{history.length} records</span>
+      </div>
+
+      <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
+        <div className="field" style={{ flex: 1, minWidth: 140, marginBottom: 0 }}>
+          <label>From</label>
+          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+        </div>
+        <div className="field" style={{ flex: 1, minWidth: 140, marginBottom: 0 }}>
+          <label>To</label>
+          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+        </div>
+        {(fromDate || toDate) && (
+          <button
+            className="btn btn-ghost"
+            style={{ width: "auto", alignSelf: "flex-end", padding: "13px 16px" }}
+            onClick={() => {
+              setFromDate("");
+              setToDate("");
+            }}
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       {loading ? null : history.length === 0 ? (
@@ -943,6 +1125,22 @@ function HistoryView() {
                       }}
                     >
                       Visitor
+                    </span>
+                  )}
+                  {r.type === "CHARGE" && (
+                    <span
+                      style={{
+                        marginLeft: 8,
+                        fontSize: 10,
+                        padding: "2px 7px",
+                        borderRadius: 10,
+                        border: "1px solid var(--brass)",
+                        color: "var(--brass-light)",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                      }}
+                    >
+                      ⚡ Charging
                     </span>
                   )}
                 </div>
