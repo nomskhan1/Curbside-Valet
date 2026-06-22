@@ -39,7 +39,7 @@ async function POST(req) {
   }
 
   const body = await req.json();
-  const { make, model, color, licensePlate, ticketNumber, ownerId, fuelType } = body || {};
+  const { make, model, color, licensePlate, ticketNumber, ownerId, fuelType, photoUrl } = body || {};
 
   if (!make || !model || !ticketNumber || !ownerId) {
     return new Response(
@@ -81,6 +81,7 @@ async function POST(req) {
       ownerId: owner.id,
       buildingId: owner.buildingId || null,
       fuelType: resolvedFuelType,
+      photoUrl: photoUrl || null,
     },
   });
 

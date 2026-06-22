@@ -43,16 +43,6 @@ model User {
   vehicles        Vehicle[]
   requests        Request[] @relation("RequestedBy")
   handledRequests Request[] @relation("HandledBy")
-  pushTokens      PushToken[]
-}
-
-model PushToken {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  token     String   @unique
-  platform  String   @default("android") // "android" | "ios"
-  createdAt DateTime @default(now())
 }
 
 model Vehicle {
@@ -73,6 +63,10 @@ model Vehicle {
   // "GASOLINE" | "ELECTRIC" | "PLUGIN_HYBRID" — determines whether the
   // charging request option is available for this vehicle.
   fuelType String @default("GASOLINE")
+
+  // URL of an uploaded photo (stored in Vercel Blob), so staff can visually
+  // identify the car. Optional.
+  photoUrl String?
 
   // Denormalized from the owner's building at creation time, so queue
   // queries can filter by building without an extra join.

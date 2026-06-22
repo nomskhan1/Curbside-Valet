@@ -27,6 +27,37 @@ function vehicleLabel(vehicle) {
   return "Visitor vehicle (no details on file)";
 }
 
+// Resizes/compresses a selected image file in the browser before it's sent
+// to the server, so uploads stay fast and don't bloat storage. Returns a
+// base64 data URL.
+function resizeImageFile(file, maxDimension = 1024, quality = 0.75) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > height && width > maxDimension) {
+          height = Math.round((height * maxDimension) / width);
+          width = maxDimension;
+        } else if (height > maxDimension) {
+          width = Math.round((width * maxDimension) / height);
+          height = maxDimension;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function Dashboard() {
   const router = useRouter();
   const [user, setUser] = useState(undefined); // undefined = loading, null = signed out
@@ -668,9 +699,22 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
               const isFuture = r.scheduledFor && new Date(r.scheduledFor) > new Date();
               return (
                 <div key={r.id} className="queue-item">
-                  <div className="queue-num">#{r.vehicle.ticketNumber}</div>
+                  {r.vehicle.photoUrl ? (
+                    <img
+                      src={r.vehicle.photoUrl}
+                      alt=""
+                      style={{ width: 46, height: 46, borderRadius: 8, objectFit: "cover", flexShrink: 0 }}
+                    />
+                  ) : (
+                    <div className="queue-num">#{r.vehicle.ticketNumber}</div>
+                  )}
                   <div className="queue-info">
                     <div className="car">
+                      {r.vehicle.photoUrl && (
+                        <span style={{ color: "var(--brass-light)", marginRight: 6 }}>
+                          #{r.vehicle.ticketNumber}
+                        </span>
+                      )}
                       {vehicleLabel(r.vehicle)}
                       {r.vehicle.isVisitor && (
                         <span
@@ -776,6 +820,9 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [error, setError] = useState("");
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState(null);
 
   const load = useCallback(async () => {
     const [vRes, uRes] = await Promise.all([fetch("/api/vehicles"), fetch("/api/admin/users")]);
@@ -787,6 +834,34 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  async function handlePhotoSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError("");
+    setPhotoUploading(true);
+    try {
+      const dataUrl = await resizeImageFile(file);
+      setPhotoPreview(dataUrl);
+      const res = await fetch("/api/vehicles/upload-photo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: dataUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error);
+        setPhotoPreview(null);
+        return;
+      }
+      setPhotoUrl(data.url);
+    } catch (err) {
+      setError("Couldn't process that image. Try a different photo.");
+      setPhotoPreview(null);
+    } finally {
+      setPhotoUploading(false);
+    }
+  }
 
   async function addVehicle(e) {
     e.preventDefault();
@@ -800,6 +875,7 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
       licensePlate: form.licensePlate.value,
       ticketNumber: form.ticketNumber.value,
       fuelType: form.fuelType.value,
+      photoUrl: photoUrl || null,
     };
     const res = await fetch("/api/vehicles", {
       method: "POST",
@@ -812,6 +888,8 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
       return;
     }
     form.reset();
+    setPhotoPreview(null);
+    setPhotoUrl(null);
     setShowAddForm(false);
     load();
   }
@@ -897,10 +975,32 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
             <label>Ticket number</label>
             <input name="ticketNumber" required />
           </div>
-          <button className="btn btn-primary" type="submit">
+          <div className="field">
+            <label>Photo (optional)</label>
+            <input type="file" accept="image/*" onChange={handlePhotoSelect} />
+            {photoUploading && (
+              <p style={{ fontSize: 12, color: "var(--slate2)", marginTop: 6 }}>Uploading...</p>
+            )}
+            {photoPreview && !photoUploading && (
+              <img
+                src={photoPreview}
+                alt="Vehicle preview"
+                style={{ marginTop: 10, maxWidth: "100%", borderRadius: 8, maxHeight: 160 }}
+              />
+            )}
+          </div>
+          <button className="btn btn-primary" type="submit" disabled={photoUploading}>
             Add vehicle
           </button>
-          <button className="btn btn-ghost" type="button" onClick={() => setShowAddForm(false)}>
+          <button
+            className="btn btn-ghost"
+            type="button"
+            onClick={() => {
+              setShowAddForm(false);
+              setPhotoPreview(null);
+              setPhotoUrl(null);
+            }}
+          >
             Cancel
           </button>
         </form>
@@ -953,9 +1053,22 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
               ) : (
                 groupVehicles.map((v) => (
                   <div key={v.id} className="queue-item">
-                    <div className="queue-num">#{v.ticketNumber}</div>
+                    {v.photoUrl ? (
+                      <img
+                        src={v.photoUrl}
+                        alt=""
+                        style={{ width: 46, height: 46, borderRadius: 8, objectFit: "cover", flexShrink: 0 }}
+                      />
+                    ) : (
+                      <div className="queue-num">#{v.ticketNumber}</div>
+                    )}
                     <div className="queue-info">
                       <div className="car">
+                        {v.photoUrl && (
+                          <span style={{ color: "var(--brass-light)", marginRight: 6 }}>
+                            #{v.ticketNumber}
+                          </span>
+                        )}
                         {vehicleLabel(v)}
                         {v.isVisitor && (
                           <span
@@ -1268,6 +1381,9 @@ function UserAdmin({ currentUser }) {
   const [showForm, setShowForm] = useState(false);
   const [role, setRole] = useState("GUEST");
   const [addVehicleNow, setAddVehicleNow] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState(null);
 
   const load = useCallback(async () => {
     const requests = [fetch("/api/admin/users")];
@@ -1280,6 +1396,34 @@ function UserAdmin({ currentUser }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  async function handlePhotoSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError("");
+    setPhotoUploading(true);
+    try {
+      const dataUrl = await resizeImageFile(file);
+      setPhotoPreview(dataUrl);
+      const res = await fetch("/api/vehicles/upload-photo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: dataUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error);
+        setPhotoPreview(null);
+        return;
+      }
+      setPhotoUrl(data.url);
+    } catch (err) {
+      setError("Couldn't process that image. Try a different photo.");
+      setPhotoPreview(null);
+    } finally {
+      setPhotoUploading(false);
+    }
+  }
 
   async function createUser(e) {
     e.preventDefault();
@@ -1314,6 +1458,7 @@ function UserAdmin({ currentUser }) {
         licensePlate: form.vehicleLicensePlate.value,
         ticketNumber: form.vehicleTicketNumber.value,
         fuelType: form.vehicleFuelType.value,
+        photoUrl: photoUrl || null,
       };
       const vRes = await fetch("/api/vehicles", {
         method: "POST",
@@ -1328,6 +1473,8 @@ function UserAdmin({ currentUser }) {
         setShowForm(false);
         setRole("GUEST");
         setAddVehicleNow(false);
+        setPhotoPreview(null);
+        setPhotoUrl(null);
         load();
         return;
       }
@@ -1337,6 +1484,8 @@ function UserAdmin({ currentUser }) {
     setShowForm(false);
     setRole("GUEST");
     setAddVehicleNow(false);
+    setPhotoPreview(null);
+    setPhotoUrl(null);
     load();
   }
 
@@ -1490,11 +1639,25 @@ function UserAdmin({ currentUser }) {
                 <label>Ticket number</label>
                 <input name="vehicleTicketNumber" required />
               </div>
+              <div className="field">
+                <label>Photo (optional)</label>
+                <input type="file" accept="image/*" onChange={handlePhotoSelect} />
+                {photoUploading && (
+                  <p style={{ fontSize: 12, color: "var(--slate2)", marginTop: 6 }}>Uploading...</p>
+                )}
+                {photoPreview && !photoUploading && (
+                  <img
+                    src={photoPreview}
+                    alt="Vehicle preview"
+                    style={{ marginTop: 10, maxWidth: "100%", borderRadius: 8, maxHeight: 160 }}
+                  />
+                )}
+              </div>
               <div className="stub-divider" style={{ margin: "16px 0" }}></div>
             </>
           )}
 
-          <button className="btn btn-primary" type="submit">
+          <button className="btn btn-primary" type="submit" disabled={photoUploading}>
             Create account
           </button>
           <button
