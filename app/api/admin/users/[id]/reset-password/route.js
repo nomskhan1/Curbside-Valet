@@ -1,7 +1,6 @@
 const bcrypt = require("bcryptjs");
-const prisma = require("../../../../../lib/db");
-const { getSessionFromRequest } = require("../../../../../lib/auth");
-
+const prisma = require("../../../../../../lib/db");
+const { getSessionFromRequest } = require("../../../../../../lib/auth");
 async function POST(req, { params }) {
   const session = getSessionFromRequest(req);
   if (!session || (session.role !== "ADMIN" && session.role !== "MANAGER")) {
