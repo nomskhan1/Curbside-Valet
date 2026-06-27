@@ -1584,6 +1584,12 @@ function UserAdmin({ currentUser }) {
   const [newGuestName, setNewGuestName] = useState("");
   const [newGuestVehicleError, setNewGuestVehicleError] = useState("");
   const [newGuestVehicleSuccess, setNewGuestVehicleSuccess] = useState(false);
+  const [vehicles, setVehicles] = useState([]);
+  const [editUserVehicleId, setEditUserVehicleId] = useState(null);
+  const [editUserVehicle, setEditUserVehicle] = useState({});
+  const [editUserVehicleError, setEditUserVehicleError] = useState("");
+  const [showAddVehicleForUser, setShowAddVehicleForUser] = useState(false);
+  const [addVehicleForUserError, setAddVehicleForUserError] = useState("");
 
   function startEditUser(u) {
     setEditUserId(u.id);
@@ -1591,6 +1597,74 @@ function UserAdmin({ currentUser }) {
     setEditUsername(u.username);
     setEditError("");
     setResetPasswordUserId(null);
+    setShowAddVehicleForUser(false);
+    setEditUserVehicleId(null);
+  }
+
+  function startEditUserVehicle(v) {
+    setEditUserVehicleId(v.id);
+    setEditUserVehicle({
+      make: v.make || "",
+      model: v.model || "",
+      color: v.color || "",
+      licensePlate: v.licensePlate || "",
+      ticketNumber: v.ticketNumber || "",
+      fuelType: v.fuelType || "GASOLINE",
+    });
+    setEditUserVehicleError("");
+  }
+
+  async function saveEditUserVehicle(id) {
+    setEditUserVehicleError("");
+    const res = await fetch(`/api/vehicles/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(editUserVehicle),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setEditUserVehicleError(data.error);
+      return;
+    }
+    setEditUserVehicleId(null);
+    load();
+  }
+
+  async function removeUserVehicle(id) {
+    const res = await fetch(`/api/vehicles/${id}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) {
+      setEditUserVehicleError(data.error);
+      return;
+    }
+    load();
+  }
+
+  async function addVehicleForUser(e, userId) {
+    e.preventDefault();
+    setAddVehicleForUserError("");
+    const form = e.target;
+    const body = {
+      ownerId: userId,
+      make: form.make.value,
+      model: form.model.value,
+      color: form.color.value,
+      licensePlate: form.licensePlate.value,
+      ticketNumber: form.ticketNumber.value,
+      fuelType: form.fuelType.value,
+    };
+    const res = await fetch("/api/vehicles", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setAddVehicleForUserError(data.error);
+      return;
+    }
+    form.reset();
+    load();
   }
 
   async function saveEditUser(userId) {
@@ -1634,11 +1708,12 @@ function UserAdmin({ currentUser }) {
   }
 
   const load = useCallback(async () => {
-    const requests = [fetch("/api/admin/users")];
+    const requests = [fetch("/api/admin/users"), fetch("/api/vehicles")];
     if (!isManager) requests.push(fetch("/api/admin/buildings"));
     const results = await Promise.all(requests);
     if (results[0].ok) setUsers(await results[0].json());
-    if (!isManager && results[1]?.ok) setBuildings(await results[1].json());
+    if (results[1].ok) setVehicles(await results[1].json());
+    if (!isManager && results[2]?.ok) setBuildings(await results[2].json());
   }, [isManager]);
 
   useEffect(() => {
@@ -1919,6 +1994,185 @@ function UserAdmin({ currentUser }) {
               <button className="mini-btn start" onClick={() => saveEditUser(u.id)}>
                 Save changes
               </button>
+
+              {u.role === "GUEST" && (
+                <div style={{ marginTop: 18 }}>
+                  <div className="stub-divider" style={{ margin: "14px 0" }}></div>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      letterSpacing: "0.08em",
+                      textTransform: "uppercase",
+                      color: "var(--brass-light)",
+                      marginBottom: 10,
+                    }}
+                  >
+                    Vehicles
+                  </div>
+
+                  {editUserVehicleError && <div className="error-box">{editUserVehicleError}</div>}
+
+                  {vehicles.filter((v) => v.ownerId === u.id).length === 0 && (
+                    <p style={{ fontSize: 13, color: "var(--slate2)", marginBottom: 10 }}>
+                      No vehicles on file yet.
+                    </p>
+                  )}
+
+                  {vehicles
+                    .filter((v) => v.ownerId === u.id)
+                    .map((v) => (
+                      <div key={v.id} style={{ marginBottom: 8 }}>
+                        <div className="queue-item">
+                          <div className="queue-num">#{v.ticketNumber}</div>
+                          <div className="queue-info">
+                            <div className="car">{vehicleLabel(v)}</div>
+                            <div className="meta">{v.licensePlate || "No plate on file"}</div>
+                          </div>
+                          <div className="queue-actions">
+                            <button
+                              className="mini-btn start"
+                              onClick={() =>
+                                editUserVehicleId === v.id
+                                  ? setEditUserVehicleId(null)
+                                  : startEditUserVehicle(v)
+                              }
+                            >
+                              Edit
+                            </button>
+                            <button
+                              className="mini-btn done"
+                              onClick={() => {
+                                if (window.confirm(`Remove vehicle #${v.ticketNumber}?`)) {
+                                  removeUserVehicle(v.id);
+                                }
+                              }}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+
+                        {editUserVehicleId === v.id && (
+                          <div style={{ padding: "10px 0", borderBottom: "1px solid var(--line)" }}>
+                            <div className="field">
+                              <label>Make</label>
+                              <input
+                                value={editUserVehicle.make}
+                                onChange={(e) =>
+                                  setEditUserVehicle({ ...editUserVehicle, make: e.target.value })
+                                }
+                              />
+                            </div>
+                            <div className="field">
+                              <label>Model</label>
+                              <input
+                                value={editUserVehicle.model}
+                                onChange={(e) =>
+                                  setEditUserVehicle({ ...editUserVehicle, model: e.target.value })
+                                }
+                              />
+                            </div>
+                            <div className="field">
+                              <label>Color</label>
+                              <input
+                                value={editUserVehicle.color}
+                                onChange={(e) =>
+                                  setEditUserVehicle({ ...editUserVehicle, color: e.target.value })
+                                }
+                              />
+                            </div>
+                            <div className="field">
+                              <label>License plate</label>
+                              <input
+                                value={editUserVehicle.licensePlate}
+                                onChange={(e) =>
+                                  setEditUserVehicle({ ...editUserVehicle, licensePlate: e.target.value })
+                                }
+                              />
+                            </div>
+                            <div className="field">
+                              <label>Vehicle type</label>
+                              <select
+                                value={editUserVehicle.fuelType}
+                                onChange={(e) =>
+                                  setEditUserVehicle({ ...editUserVehicle, fuelType: e.target.value })
+                                }
+                              >
+                                <option value="GASOLINE">Gasoline</option>
+                                <option value="ELECTRIC">Electric</option>
+                                <option value="PLUGIN_HYBRID">Plug-in Hybrid</option>
+                              </select>
+                            </div>
+                            <div className="field">
+                              <label>Ticket number</label>
+                              <input
+                                value={editUserVehicle.ticketNumber}
+                                onChange={(e) =>
+                                  setEditUserVehicle({ ...editUserVehicle, ticketNumber: e.target.value })
+                                }
+                              />
+                            </div>
+                            <button className="mini-btn start" onClick={() => saveEditUserVehicle(v.id)}>
+                              Save changes
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                  {showAddVehicleForUser ? (
+                    <form onSubmit={(e) => addVehicleForUser(e, u.id)} style={{ marginTop: 10 }}>
+                      {addVehicleForUserError && <div className="error-box">{addVehicleForUserError}</div>}
+                      <div className="field">
+                        <label>Make</label>
+                        <input name="make" required />
+                      </div>
+                      <div className="field">
+                        <label>Model</label>
+                        <input name="model" required />
+                      </div>
+                      <div className="field">
+                        <label>Color</label>
+                        <input name="color" />
+                      </div>
+                      <div className="field">
+                        <label>License plate</label>
+                        <input name="licensePlate" />
+                      </div>
+                      <div className="field">
+                        <label>Vehicle type</label>
+                        <select name="fuelType" defaultValue="GASOLINE">
+                          <option value="GASOLINE">Gasoline</option>
+                          <option value="ELECTRIC">Electric</option>
+                          <option value="PLUGIN_HYBRID">Plug-in Hybrid</option>
+                        </select>
+                      </div>
+                      <div className="field">
+                        <label>Ticket number</label>
+                        <input name="ticketNumber" required />
+                      </div>
+                      <button className="btn btn-primary" type="submit">
+                        Add vehicle
+                      </button>
+                      <button
+                        className="btn btn-ghost"
+                        type="button"
+                        onClick={() => setShowAddVehicleForUser(false)}
+                      >
+                        Done
+                      </button>
+                    </form>
+                  ) : (
+                    <button
+                      className="btn btn-ghost"
+                      onClick={() => setShowAddVehicleForUser(true)}
+                      style={{ marginTop: 4 }}
+                    >
+                      + Add a vehicle
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
