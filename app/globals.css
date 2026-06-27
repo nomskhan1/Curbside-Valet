@@ -26,14 +26,30 @@ body{
 a{color:var(--brass-light);}
 
 .shell{ max-width:480px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; }
+
+/* Inside the installed Android/iOS app, fill the real device width instead
+   of staying capped at the desktop-browser-friendly 480px. Also respect
+   safe areas (notches, status bars) so content isn't obscured by them. */
+body.native-app .shell{
+  max-width:100%;
+  padding-left:env(safe-area-inset-left);
+  padding-right:env(safe-area-inset-right);
+}
+body.native-app header.topbar{
+  padding-top:calc(18px + env(safe-area-inset-top));
+}
+body.native-app footer.note{
+  padding-bottom:calc(14px + env(safe-area-inset-bottom));
+}
 header.topbar{
   display:flex; align-items:center; justify-content:space-between;
   padding:18px 20px 14px; border-bottom:1px solid var(--line);
 }
 .brand{ display:flex; align-items:center; gap:8px; }
-.brand img.logo{ width:50px; height:50px; border-radius:10px; flex-shrink:0; }
+.brand img.logo{ width:36px; height:36px; border-radius:8px; flex-shrink:0; }
 .brand .mark{ font-family:"Oswald",sans-serif; font-weight:600; font-size:20px; letter-spacing:0.06em; text-transform:uppercase; color:var(--brass-light); }
 .brand .sub{ font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:var(--slate2); }
+main{ flex:1; padding:22px 20px 100px; }
 
 .hero-line{ font-size:13px; color:var(--slate2); letter-spacing:0.04em; margin-bottom:6px; }
 h1.title{ font-family:"Oswald",sans-serif; font-size:28px; line-height:1.1; margin:0 0 20px; text-transform:uppercase; letter-spacing:0.01em; }
@@ -93,9 +109,9 @@ h1.title{ font-family:"Oswald",sans-serif; font-size:28px; line-height:1.1; marg
 .mini-btn.ready{ background:var(--green); color:var(--cream); font-weight:600; }
 .mini-btn.done{ background:transparent; border:1px solid var(--line); color:var(--slate2); }
 
-.tabs{ display:flex; border:1px solid var(--line); border-radius:20px; overflow:hidden; margin-bottom:18px; }
-.tabs button{ flex:1; background:transparent; border:none; color:var(--slate2); padding:9px 0; font-family:"Oswald",sans-serif; font-size:12px; letter-spacing:0.06em; text-transform:uppercase; cursor:pointer; }
-.tabs button.active{ background:var(--brass); color:var(--navy); font-weight:600; }
+.tabs{ display:flex; border:1px solid var(--line); border-radius:20px; overflow-x:auto; margin-bottom:18px; -webkit-overflow-scrolling:touch; }
+.tabs button{ flex:1 0 auto; min-width:72px; background:transparent; border:none; color:var(--slate2); padding:9px 10px; font-family:"Oswald",sans-serif; font-size:12px; letter-spacing:0.06em; text-transform:uppercase; cursor:pointer; white-space:nowrap; }
+.tabs button.active{ background:var(--brass); color:var(--navy); font-weight:600; border-radius:20px; }
 
 .list-row{ display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--line); font-size:14px; }
 .list-row .role-tag{ font-size:10px; padding:3px 8px; border-radius:10px; border:1px solid var(--line); color:var(--slate2); text-transform:uppercase; letter-spacing:0.06em; }
