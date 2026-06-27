@@ -830,6 +830,7 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
   const [editVehicleId, setEditVehicleId] = useState(null);
   const [editVehicle, setEditVehicle] = useState({});
   const [editVehicleError, setEditVehicleError] = useState("");
+  const [addVehicleSuccess, setAddVehicleSuccess] = useState(false);
 
   const load = useCallback(async () => {
     const [vRes, uRes] = await Promise.all([fetch("/api/vehicles"), fetch("/api/admin/users")]);
@@ -894,10 +895,19 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
       setError(data.error);
       return;
     }
-    form.reset();
+    // Keep the form open with the same owner selected, just clear the
+    // car-specific fields, so adding several vehicles for the same guest
+    // doesn't require reopening the form and reselecting them each time.
+    form.make.value = "";
+    form.model.value = "";
+    form.color.value = "";
+    form.licensePlate.value = "";
+    form.ticketNumber.value = "";
+    form.fuelType.value = "GASOLINE";
     setPhotoPreview(null);
     setPhotoUrl(null);
-    setShowAddForm(false);
+    setAddVehicleSuccess(true);
+    setTimeout(() => setAddVehicleSuccess(false), 2000);
     load();
   }
 
@@ -1070,6 +1080,11 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
               />
             )}
           </div>
+          {addVehicleSuccess && (
+            <p style={{ color: "var(--green)", fontSize: 13, marginBottom: 10 }}>
+              Vehicle added! Add another for the same guest, or tap Done.
+            </p>
+          )}
           <button className="btn btn-primary" type="submit" disabled={photoUploading}>
             Add vehicle
           </button>
@@ -1080,9 +1095,10 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
               setShowAddForm(false);
               setPhotoPreview(null);
               setPhotoUrl(null);
+              setAddVehicleSuccess(false);
             }}
           >
-            Cancel
+            Done
           </button>
         </form>
       ) : (
@@ -1564,6 +1580,10 @@ function UserAdmin({ currentUser }) {
   const [editName, setEditName] = useState("");
   const [editUsername, setEditUsername] = useState("");
   const [editError, setEditError] = useState("");
+  const [newGuestId, setNewGuestId] = useState(null);
+  const [newGuestName, setNewGuestName] = useState("");
+  const [newGuestVehicleError, setNewGuestVehicleError] = useState("");
+  const [newGuestVehicleSuccess, setNewGuestVehicleSuccess] = useState(false);
 
   function startEditUser(u) {
     setEditUserId(u.id);
@@ -1714,6 +1734,43 @@ function UserAdmin({ currentUser }) {
     setAddVehicleNow(false);
     setPhotoPreview(null);
     setPhotoUrl(null);
+
+    // For a new guest, offer to keep adding more vehicles for them right
+    // away instead of having to go find them again in the Vehicles tab.
+    if (body.role === "GUEST") {
+      setNewGuestId(data.id);
+      setNewGuestName(body.name);
+    }
+
+    load();
+  }
+
+  async function addAnotherVehicleForNewGuest(e) {
+    e.preventDefault();
+    setNewGuestVehicleError("");
+    const form = e.target;
+    const vBody = {
+      ownerId: newGuestId,
+      make: form.make.value,
+      model: form.model.value,
+      color: form.color.value,
+      licensePlate: form.licensePlate.value,
+      ticketNumber: form.ticketNumber.value,
+      fuelType: form.fuelType.value,
+    };
+    const res = await fetch("/api/vehicles", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(vBody),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setNewGuestVehicleError(data.error);
+      return;
+    }
+    form.reset();
+    setNewGuestVehicleSuccess(true);
+    setTimeout(() => setNewGuestVehicleSuccess(false), 2000);
     load();
   }
 
@@ -2053,6 +2110,62 @@ function UserAdmin({ currentUser }) {
         <button className="btn btn-ghost" onClick={() => setShowForm(true)} style={{ marginTop: 14 }}>
           {isManager ? "+ Add guest or staff" : "+ Add staff or admin"}
         </button>
+      )}
+
+      {newGuestId && (
+        <div className="stub" style={{ marginTop: 18 }}>
+          <div className="stub-top">
+            <h1 className="title" style={{ marginBottom: 0, fontSize: 18 }}>
+              Add another vehicle for {newGuestName}?
+            </h1>
+            <button
+              onClick={() => setNewGuestId(null)}
+              style={{ background: "none", border: "none", color: "var(--slate2)", cursor: "pointer", fontSize: 13 }}
+            >
+              Close
+            </button>
+          </div>
+          {newGuestVehicleError && <div className="error-box">{newGuestVehicleError}</div>}
+          {newGuestVehicleSuccess && (
+            <p style={{ color: "var(--green)", fontSize: 13 }}>Vehicle added! Add another, or tap Done.</p>
+          )}
+          <form onSubmit={addAnotherVehicleForNewGuest}>
+            <div className="field">
+              <label>Make</label>
+              <input name="make" required />
+            </div>
+            <div className="field">
+              <label>Model</label>
+              <input name="model" required />
+            </div>
+            <div className="field">
+              <label>Color</label>
+              <input name="color" />
+            </div>
+            <div className="field">
+              <label>License plate</label>
+              <input name="licensePlate" />
+            </div>
+            <div className="field">
+              <label>Vehicle type</label>
+              <select name="fuelType" defaultValue="GASOLINE">
+                <option value="GASOLINE">Gasoline</option>
+                <option value="ELECTRIC">Electric</option>
+                <option value="PLUGIN_HYBRID">Plug-in Hybrid</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>Ticket number</label>
+              <input name="ticketNumber" required />
+            </div>
+            <button className="btn btn-primary" type="submit">
+              Add vehicle
+            </button>
+            <button className="btn btn-ghost" type="button" onClick={() => setNewGuestId(null)}>
+              Done
+            </button>
+          </form>
+        </div>
       )}
     </>
   );
