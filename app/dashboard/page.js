@@ -827,6 +827,9 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
   const galleryInputRef = useRef(null);
   const [fuelTypeFilter, setFuelTypeFilter] = useState("ALL");
   const [vehicleSearchQuery, setVehicleSearchQuery] = useState("");
+  const [editVehicleId, setEditVehicleId] = useState(null);
+  const [editVehicle, setEditVehicle] = useState({});
+  const [editVehicleError, setEditVehicleError] = useState("");
 
   const load = useCallback(async () => {
     const [vRes, uRes] = await Promise.all([fetch("/api/vehicles"), fetch("/api/admin/users")]);
@@ -906,6 +909,35 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
       setError(data.error);
       return;
     }
+    load();
+  }
+
+  function startEditVehicle(v) {
+    setEditVehicleId(v.id);
+    setEditVehicle({
+      make: v.make || "",
+      model: v.model || "",
+      color: v.color || "",
+      licensePlate: v.licensePlate || "",
+      ticketNumber: v.ticketNumber || "",
+      fuelType: v.fuelType || "GASOLINE",
+    });
+    setEditVehicleError("");
+  }
+
+  async function saveEditVehicle(id) {
+    setEditVehicleError("");
+    const res = await fetch(`/api/vehicles/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(editVehicle),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setEditVehicleError(data.error);
+      return;
+    }
+    setEditVehicleId(null);
     load();
   }
 
@@ -1123,7 +1155,8 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
                 </div>
               ) : (
                 groupVehicles.map((v) => (
-                  <div key={v.id} className="queue-item">
+                  <div key={v.id}>
+                  <div className="queue-item">
                     {v.photoUrl ? (
                       <img
                         src={v.photoUrl}
@@ -1180,6 +1213,14 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
                     </div>
                     <div className="queue-actions">
                       <button
+                        className="mini-btn start"
+                        onClick={() =>
+                          editVehicleId === v.id ? setEditVehicleId(null) : startEditVehicle(v)
+                        }
+                      >
+                        Edit
+                      </button>
+                      <button
                         className="mini-btn done"
                         onClick={() => {
                           if (window.confirm(`Remove vehicle #${v.ticketNumber}? This can't be undone.`)) {
@@ -1190,6 +1231,62 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
                         Remove
                       </button>
                     </div>
+                  </div>
+
+                  {editVehicleId === v.id && (
+                    <div style={{ padding: "10px 0 14px", borderBottom: "1px solid var(--line)" }}>
+                      {editVehicleError && <div className="error-box">{editVehicleError}</div>}
+                      <div className="field">
+                        <label>Make</label>
+                        <input
+                          value={editVehicle.make}
+                          onChange={(e) => setEditVehicle({ ...editVehicle, make: e.target.value })}
+                        />
+                      </div>
+                      <div className="field">
+                        <label>Model</label>
+                        <input
+                          value={editVehicle.model}
+                          onChange={(e) => setEditVehicle({ ...editVehicle, model: e.target.value })}
+                        />
+                      </div>
+                      <div className="field">
+                        <label>Color</label>
+                        <input
+                          value={editVehicle.color}
+                          onChange={(e) => setEditVehicle({ ...editVehicle, color: e.target.value })}
+                        />
+                      </div>
+                      <div className="field">
+                        <label>License plate</label>
+                        <input
+                          value={editVehicle.licensePlate}
+                          onChange={(e) => setEditVehicle({ ...editVehicle, licensePlate: e.target.value })}
+                        />
+                      </div>
+                      <div className="field">
+                        <label>Vehicle type</label>
+                        <select
+                          value={editVehicle.fuelType}
+                          onChange={(e) => setEditVehicle({ ...editVehicle, fuelType: e.target.value })}
+                        >
+                          <option value="GASOLINE">Gasoline</option>
+                          <option value="ELECTRIC">Electric</option>
+                          <option value="PLUGIN_HYBRID">Plug-in Hybrid</option>
+                        </select>
+                      </div>
+                      <div className="field">
+                        <label>Ticket number</label>
+                        <input
+                          value={editVehicle.ticketNumber}
+                          onChange={(e) => setEditVehicle({ ...editVehicle, ticketNumber: e.target.value })}
+                        />
+                      </div>
+                      <button className="mini-btn start" onClick={() => saveEditVehicle(v.id)}>
+                        Save changes
+                      </button>
+                    </div>
+                  )}
                   </div>
                 ))
               )}
@@ -1463,6 +1560,34 @@ function UserAdmin({ currentUser }) {
   const [resetSuccess, setResetSuccess] = useState(null);
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  const [editUserId, setEditUserId] = useState(null);
+  const [editName, setEditName] = useState("");
+  const [editUsername, setEditUsername] = useState("");
+  const [editError, setEditError] = useState("");
+
+  function startEditUser(u) {
+    setEditUserId(u.id);
+    setEditName(u.name);
+    setEditUsername(u.username);
+    setEditError("");
+    setResetPasswordUserId(null);
+  }
+
+  async function saveEditUser(userId) {
+    setEditError("");
+    const res = await fetch(`/api/admin/users/${userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: editName, username: editUsername }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setEditError(data.error);
+      return;
+    }
+    setEditUserId(null);
+    load();
+  }
 
   async function resetPassword(userId) {
     setResetError("");
@@ -1657,11 +1782,29 @@ function UserAdmin({ currentUser }) {
               <span className="role-tag">{u.role}</span>
               {(!isManager || ["GUEST", "STAFF"].includes(u.role)) && (
                 <button
+                  onClick={() => (editUserId === u.id ? setEditUserId(null) : startEditUser(u))}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "var(--brass-light)",
+                    fontSize: 11,
+                    cursor: "pointer",
+                    padding: 0,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  Edit
+                </button>
+              )}
+              {(!isManager || ["GUEST", "STAFF"].includes(u.role)) && (
+                <button
                   onClick={() => {
                     setResetPasswordUserId(resetPasswordUserId === u.id ? null : u.id);
                     setResetPasswordValue("");
                     setResetError("");
                     setResetSuccess(null);
+                    setEditUserId(null);
                   }}
                   style={{
                     background: "none",
@@ -1704,6 +1847,23 @@ function UserAdmin({ currentUser }) {
               )}
             </div>
           </div>
+
+          {editUserId === u.id && (
+            <div style={{ padding: "10px 0 14px", borderBottom: "1px solid var(--line)" }}>
+              {editError && <div className="error-box">{editError}</div>}
+              <div className="field">
+                <label>Name</label>
+                <input value={editName} onChange={(e) => setEditName(e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Username</label>
+                <input value={editUsername} onChange={(e) => setEditUsername(e.target.value)} />
+              </div>
+              <button className="mini-btn start" onClick={() => saveEditUser(u.id)}>
+                Save changes
+              </button>
+            </div>
+          )}
 
           {resetPasswordUserId === u.id && (
             <div style={{ padding: "10px 0 14px", borderBottom: "1px solid var(--line)" }}>
