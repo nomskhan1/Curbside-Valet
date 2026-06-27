@@ -1420,6 +1420,34 @@ function UserAdmin({ currentUser }) {
   const [photoUrl, setPhotoUrl] = useState(null);
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
+  const [resetPasswordUserId, setResetPasswordUserId] = useState(null);
+  const [resetPasswordValue, setResetPasswordValue] = useState("");
+  const [resetError, setResetError] = useState("");
+  const [resetSuccess, setResetSuccess] = useState(null);
+
+  async function resetPassword(userId) {
+    setResetError("");
+    if (!resetPasswordValue || resetPasswordValue.length < 6) {
+      setResetError("New password must be at least 6 characters.");
+      return;
+    }
+    const res = await fetch(`/api/admin/users/${userId}/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ newPassword: resetPasswordValue }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setResetError(data.error);
+      return;
+    }
+    setResetSuccess(userId);
+    setResetPasswordValue("");
+    setTimeout(() => {
+      setResetPasswordUserId(null);
+      setResetSuccess(null);
+    }, 2000);
+  }
 
   const load = useCallback(async () => {
     const requests = [fetch("/api/admin/users")];
@@ -1547,42 +1575,95 @@ function UserAdmin({ currentUser }) {
       {error && <div className="error-box">{error}</div>}
 
       {users.map((u) => (
-        <div key={u.id} className="list-row">
-          <div>
-            <div>{u.name}</div>
-            <div style={{ fontSize: 12, color: "var(--slate2)" }}>
-              {u.username}
-              {u.building ? ` · ${u.building.name}` : ""}
+        <div key={u.id} style={{ marginBottom: resetPasswordUserId === u.id ? 4 : 0 }}>
+          <div className="list-row">
+            <div>
+              <div>{u.name}</div>
+              <div style={{ fontSize: 12, color: "var(--slate2)" }}>
+                {u.username}
+                {u.building ? ` · ${u.building.name}` : ""}
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span className="role-tag">{u.role}</span>
+              {(!isManager || ["GUEST", "STAFF"].includes(u.role)) && (
+                <button
+                  onClick={() => {
+                    setResetPasswordUserId(resetPasswordUserId === u.id ? null : u.id);
+                    setResetPasswordValue("");
+                    setResetError("");
+                    setResetSuccess(null);
+                  }}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "var(--brass-light)",
+                    fontSize: 11,
+                    cursor: "pointer",
+                    padding: 0,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  Reset password
+                </button>
+              )}
+              {!isManager && (
+                <button
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Remove ${u.name} (${u.username})? This will also permanently delete any vehicles and request history tied to this account. This can't be undone.`
+                      )
+                    ) {
+                      removeUser(u.id);
+                    }
+                  }}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "var(--red)",
+                    fontSize: 11,
+                    cursor: "pointer",
+                    padding: 0,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  Remove
+                </button>
+              )}
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span className="role-tag">{u.role}</span>
-            {!isManager && (
-              <button
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      `Remove ${u.name} (${u.username})? This will also permanently delete any vehicles and request history tied to this account. This can't be undone.`
-                    )
-                  ) {
-                    removeUser(u.id);
-                  }
-                }}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "var(--red)",
-                  fontSize: 11,
-                  cursor: "pointer",
-                  padding: 0,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.04em",
-                }}
-              >
-                Remove
-              </button>
-            )}
-          </div>
+
+          {resetPasswordUserId === u.id && (
+            <div style={{ padding: "10px 0 14px", borderBottom: "1px solid var(--line)" }}>
+              {resetSuccess === u.id ? (
+                <p style={{ color: "var(--green)", fontSize: 13 }}>Password updated.</p>
+              ) : (
+                <>
+                  {resetError && <div className="error-box">{resetError}</div>}
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input
+                      type="password"
+                      placeholder="New password"
+                      value={resetPasswordValue}
+                      onChange={(e) => setResetPasswordValue(e.target.value)}
+                      style={{ flex: 1 }}
+                      minLength={6}
+                    />
+                    <button
+                      className="mini-btn start"
+                      style={{ flexShrink: 0 }}
+                      onClick={() => resetPassword(u.id)}
+                    >
+                      Save
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       ))}
 
