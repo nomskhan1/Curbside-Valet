@@ -826,6 +826,7 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
   const [fuelTypeFilter, setFuelTypeFilter] = useState("ALL");
+  const [vehicleSearchQuery, setVehicleSearchQuery] = useState("");
 
   const load = useCallback(async () => {
     const [vRes, uRes] = await Promise.all([fetch("/api/vehicles"), fetch("/api/admin/users")]);
@@ -910,8 +911,18 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
 
   const guestUsers = users.filter((u) => u.role === "GUEST");
 
-  const fuelFilteredVehicles =
-    fuelTypeFilter === "ALL" ? vehicles : vehicles.filter((v) => v.fuelType === fuelTypeFilter);
+  const fuelFilteredVehicles = vehicles
+    .filter((v) => fuelTypeFilter === "ALL" || v.fuelType === fuelTypeFilter)
+    .filter((v) => {
+      if (!vehicleSearchQuery) return true;
+      const q = vehicleSearchQuery.toLowerCase();
+      return (
+        (v.licensePlate || "").toLowerCase().includes(q) ||
+        (v.make || "").toLowerCase().includes(q) ||
+        (v.model || "").toLowerCase().includes(q) ||
+        (v.ticketNumber || "").toLowerCase().includes(q)
+      );
+    });
 
   const buildingNames = Array.from(
     new Set(fuelFilteredVehicles.map((v) => v.building?.name || "Unassigned"))
@@ -1049,6 +1060,15 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
       )}
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div className="field" style={{ flex: 1, minWidth: 160 }}>
+          <label>Search by plate, make, or model</label>
+          <input
+            type="text"
+            placeholder="e.g. 8XJ-201 or Tesla"
+            value={vehicleSearchQuery}
+            onChange={(e) => setVehicleSearchQuery(e.target.value)}
+          />
+        </div>
         {buildingNames.length > 1 && (
           <div className="field" style={{ flex: 1, minWidth: 160 }}>
             <label>Filter by building</label>
@@ -1442,6 +1462,7 @@ function UserAdmin({ currentUser }) {
   const [resetError, setResetError] = useState("");
   const [resetSuccess, setResetSuccess] = useState(null);
   const [roleFilter, setRoleFilter] = useState("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
 
   async function resetPassword(userId) {
     setResetError("");
@@ -1592,18 +1613,37 @@ function UserAdmin({ currentUser }) {
       </div>
       {error && <div className="error-box">{error}</div>}
 
-      <div className="field">
-        <label>Filter by role</label>
-        <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
-          <option value="ALL">All roles</option>
-          <option value="GUEST">Guest</option>
-          <option value="STAFF">Staff</option>
-          {!isManager && <option value="MANAGER">Manager</option>}
-          {!isManager && <option value="ADMIN">Admin</option>}
-        </select>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div className="field" style={{ flex: 1, minWidth: 160 }}>
+          <label>Search by name</label>
+          <input
+            type="text"
+            placeholder="e.g. Jordan Park"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        <div className="field" style={{ flex: 1, minWidth: 160 }}>
+          <label>Filter by role</label>
+          <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+            <option value="ALL">All roles</option>
+            <option value="GUEST">Guest</option>
+            <option value="STAFF">Staff</option>
+            {!isManager && <option value="MANAGER">Manager</option>}
+            {!isManager && <option value="ADMIN">Admin</option>}
+          </select>
+        </div>
       </div>
 
-      {(roleFilter === "ALL" ? users : users.filter((u) => u.role === roleFilter)).map((u) => (
+      {users
+        .filter((u) => roleFilter === "ALL" || u.role === roleFilter)
+        .filter(
+          (u) =>
+            !searchQuery ||
+            u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            u.username.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+        .map((u) => (
         <div key={u.id} style={{ marginBottom: resetPasswordUserId === u.id ? 4 : 0 }}>
           <div className="list-row">
             <div>
