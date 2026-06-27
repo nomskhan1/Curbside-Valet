@@ -825,6 +825,7 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
   const [photoUrl, setPhotoUrl] = useState(null);
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
+  const [fuelTypeFilter, setFuelTypeFilter] = useState("ALL");
 
   const load = useCallback(async () => {
     const [vRes, uRes] = await Promise.all([fetch("/api/vehicles"), fetch("/api/admin/users")]);
@@ -909,12 +910,15 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
 
   const guestUsers = users.filter((u) => u.role === "GUEST");
 
+  const fuelFilteredVehicles =
+    fuelTypeFilter === "ALL" ? vehicles : vehicles.filter((v) => v.fuelType === fuelTypeFilter);
+
   const buildingNames = Array.from(
-    new Set(vehicles.map((v) => v.building?.name || "Unassigned"))
+    new Set(fuelFilteredVehicles.map((v) => v.building?.name || "Unassigned"))
   ).sort();
 
   const grouped = {};
-  for (const v of vehicles) {
+  for (const v of fuelFilteredVehicles) {
     const key = v.building?.name || "Unassigned";
     if (!grouped[key]) grouped[key] = [];
     grouped[key].push(v);
@@ -929,7 +933,7 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
         <h1 className="title" style={{ marginBottom: 2 }}>
           Registered vehicles
         </h1>
-        <span className="count-badge">{vehicles.length} total</span>
+        <span className="count-badge">{fuelFilteredVehicles.length} total</span>
       </div>
 
       {error && <div className="error-box">{error}</div>}
@@ -1044,24 +1048,37 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
         </button>
       )}
 
-      {buildingNames.length > 1 && (
-        <div className="field">
-          <label>Filter by building</label>
-          <select value={filterBuilding} onChange={(e) => setFilterBuilding(e.target.value)}>
-            <option value="all">All buildings</option>
-            {buildingNames.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        {buildingNames.length > 1 && (
+          <div className="field" style={{ flex: 1, minWidth: 160 }}>
+            <label>Filter by building</label>
+            <select value={filterBuilding} onChange={(e) => setFilterBuilding(e.target.value)}>
+              <option value="all">All buildings</option>
+              {buildingNames.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        <div className="field" style={{ flex: 1, minWidth: 160 }}>
+          <label>Filter by vehicle type</label>
+          <select value={fuelTypeFilter} onChange={(e) => setFuelTypeFilter(e.target.value)}>
+            <option value="ALL">All types</option>
+            <option value="GASOLINE">Gasoline</option>
+            <option value="ELECTRIC">Electric</option>
+            <option value="PLUGIN_HYBRID">Plug-in Hybrid</option>
           </select>
         </div>
-      )}
+      </div>
 
-      {loading ? null : vehicles.length === 0 ? (
+      {loading ? null : fuelFilteredVehicles.length === 0 ? (
         <div className="empty-state">
-          <div className="big">No vehicles yet</div>
-          Use "Add a vehicle for a guest" above to register the first one.
+          <div className="big">No vehicles found</div>
+          {vehicles.length === 0
+            ? 'Use "Add a vehicle for a guest" above to register the first one.'
+            : "No vehicles match this filter."}
         </div>
       ) : (
         visibleGroups.map((groupName) => {
@@ -1424,6 +1441,7 @@ function UserAdmin({ currentUser }) {
   const [resetPasswordValue, setResetPasswordValue] = useState("");
   const [resetError, setResetError] = useState("");
   const [resetSuccess, setResetSuccess] = useState(null);
+  const [roleFilter, setRoleFilter] = useState("ALL");
 
   async function resetPassword(userId) {
     setResetError("");
@@ -1574,7 +1592,18 @@ function UserAdmin({ currentUser }) {
       </div>
       {error && <div className="error-box">{error}</div>}
 
-      {users.map((u) => (
+      <div className="field">
+        <label>Filter by role</label>
+        <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+          <option value="ALL">All roles</option>
+          <option value="GUEST">Guest</option>
+          <option value="STAFF">Staff</option>
+          {!isManager && <option value="MANAGER">Manager</option>}
+          {!isManager && <option value="ADMIN">Admin</option>}
+        </select>
+      </div>
+
+      {(roleFilter === "ALL" ? users : users.filter((u) => u.role === roleFilter)).map((u) => (
         <div key={u.id} style={{ marginBottom: resetPasswordUserId === u.id ? 4 : 0 }}>
           <div className="list-row">
             <div>
