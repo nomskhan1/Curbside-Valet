@@ -379,14 +379,16 @@ function GuestView({ user }) {
   } else {
     pickupSection = (
       <>
-      {vehicles.length === 0 && (
+      {vehicles.filter((v) => !v.isVisitor).length === 0 && (
         <div className="empty-state">
           <div className="big">No vehicles yet</div>
           Ask your building's front desk or admin to add your vehicle to your account.
         </div>
       )}
 
-      {vehicles.map((v) => (
+      {vehicles
+        .filter((v) => !v.isVisitor)
+        .map((v) => (
         <div key={v.id} className="queue-item">
           <div className="queue-num">#{v.ticketNumber}</div>
           <div className="queue-info">

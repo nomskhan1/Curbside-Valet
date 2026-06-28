@@ -56,7 +56,11 @@ async function POST(req) {
   // requesting pickup for a visitor's car that's never been entered into
   // the system before. Just the ticket number is enough; staff can fill in
   // car details later if they ever need to.
-  if (!vehicle && ticketNumber) {
+  //
+  // This only applies to pickup requests. A charging request needs a
+  // vehicle that's already registered as Electric/Plug-in Hybrid, so
+  // there's nothing sensible to auto-create here.
+  if (!vehicle && ticketNumber && requestType === "PICKUP") {
     vehicle = await prisma.vehicle.create({
       data: {
         ticketNumber: ticketNumber.trim(),
@@ -70,9 +74,12 @@ async function POST(req) {
   if (!vehicle) {
     return new Response(
       JSON.stringify({
-        error: ticketNumber
-          ? "No vehicle found with that ticket number."
-          : "Vehicle not found.",
+        error:
+          requestType === "CHARGE"
+            ? "No registered vehicle found with that ticket number. The vehicle must already be on file and marked Electric or Plug-in Hybrid before it can be charged."
+            : ticketNumber
+            ? "No vehicle found with that ticket number."
+            : "Vehicle not found.",
       }),
       { status: 404 }
     );
