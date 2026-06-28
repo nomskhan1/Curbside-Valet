@@ -544,6 +544,7 @@ function GuestView({ user }) {
 
   return (
     <>
+      {error && <div className="error-box">{error}</div>}
       {pickupSection}
       {chargeSection}
     </>
