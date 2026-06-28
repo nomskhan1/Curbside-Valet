@@ -53,14 +53,9 @@ async function POST(req) {
   }
 
   // Ticket number with no matching vehicle yet — this is a resident
-  // requesting pickup for a visitor's car that's never been entered into
-  // the system before. Just the ticket number is enough; staff can fill in
-  // car details later if they ever need to.
-  //
-  // This only applies to pickup requests. A charging request needs a
-  // vehicle that's already registered as Electric/Plug-in Hybrid, so
-  // there's nothing sensible to auto-create here.
-  if (!vehicle && ticketNumber && requestType === "PICKUP") {
+  // requesting pickup or charging for a visitor's car that's never been
+  // entered into the system before. Just the ticket number is enough.
+  if (!vehicle && ticketNumber) {
     vehicle = await prisma.vehicle.create({
       data: {
         ticketNumber: ticketNumber.trim(),
@@ -74,12 +69,9 @@ async function POST(req) {
   if (!vehicle) {
     return new Response(
       JSON.stringify({
-        error:
-          requestType === "CHARGE"
-            ? "No registered vehicle found with that ticket number. The vehicle must already be on file and marked Electric or Plug-in Hybrid before it can be charged."
-            : ticketNumber
-            ? "No vehicle found with that ticket number."
-            : "Vehicle not found.",
+        error: ticketNumber
+          ? "No vehicle found with that ticket number."
+          : "Vehicle not found.",
       }),
       { status: 404 }
     );
@@ -102,8 +94,12 @@ async function POST(req) {
     );
   }
 
-  // Charging only makes sense for electric or plug-in hybrid vehicles.
-  if (requestType === "CHARGE" && vehicle.fuelType === "GASOLINE") {
+  // Charging only makes sense for electric or plug-in hybrid vehicles —
+  // but this only applies when a guest picks one of their own saved cars.
+  // A ticket-based charging request (someone else's car, or a brand-new
+  // visitor entry) is treated the same as a visitor pickup request: the
+  // ticket itself is the proof, no fuel-type check needed.
+  if (requestType === "CHARGE" && vehicleId && vehicle.fuelType === "GASOLINE") {
     return new Response(
       JSON.stringify({ error: "This vehicle isn't marked as electric or plug-in hybrid, so charging isn't available for it." }),
       { status: 400 }
