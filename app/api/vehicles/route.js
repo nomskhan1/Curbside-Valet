@@ -7,11 +7,11 @@ async function GET(req) {
 
   let where;
   if (session.role === "GUEST") {
-    where = { ownerId: session.id };
+    where = { ownerId: session.id, isVisitor: false };
   } else if (session.role === "STAFF" || session.role === "MANAGER") {
-    where = { buildingId: session.buildingId || "__none__" };
+    where = { buildingId: session.buildingId || "__none__", isVisitor: false };
   } else {
-    where = {}; // ADMIN sees every building
+    where = { isVisitor: false }; // ADMIN sees every building's real registered vehicles
   }
 
   const vehicles = await prisma.vehicle.findMany({
