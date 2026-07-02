@@ -26,6 +26,9 @@ body{
 a{color:var(--brass-light);}
 
 .shell{ max-width:480px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; }
+@media (min-width: 700px){ .shell{ max-width:680px; } }
+@media (min-width: 1000px){ .shell{ max-width:880px; } main{ padding-left:40px; padding-right:40px; } }
+@media (min-width: 1300px){ .shell{ max-width:1080px; } }
 
 /* Inside the installed Android/iOS app, fill the real device width instead
    of staying capped at the desktop-browser-friendly 480px. Also respect
