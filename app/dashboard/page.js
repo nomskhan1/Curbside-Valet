@@ -553,29 +553,18 @@ function GuestView({ user }) {
 
 // ---------------- STAFF / ADMIN ----------------
 
-// Generates a short, attention-getting two-tone beep using the Web Audio API.
-// No audio file needed, and it works offline.
-function playAlertBeep(ctx) {
-  const now = ctx.currentTime;
-  [880, 660].forEach((freq, i) => {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.value = freq;
-    const start = now + i * 0.18;
-    gain.gain.setValueAtTime(0, start);
-    gain.gain.linearRampToValueAtTime(0.25, start + 0.02);
-    gain.gain.linearRampToValueAtTime(0, start + 0.16);
-    osc.connect(gain).connect(ctx.destination);
-    osc.start(start);
-    osc.stop(start + 0.18);
-  });
+// Plays the notification alert MP3.
+function playAlertSound() {
+  try {
+    const audio = new Audio("/alert.mp3");
+    audio.volume = 1.0;
+    audio.play().catch(() => {});
+  } catch {}
 }
 
 function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilterBuilding }) {
   const [requests, setRequests] = useState([]);
   const [alertsEnabled, setAlertsEnabled] = useState(false);
-  const audioCtxRef = useRef(null);
   const beepIntervalRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -589,32 +578,27 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
     return () => clearInterval(id);
   }, [load]);
 
-  // Don't ring for requests scheduled for later — only for ones that are
-  // actually due now (no scheduledFor, or a scheduledFor time that's arrived).
   const waitingCount = requests.filter(
     (r) => r.status === "WAITING" && (!r.scheduledFor || new Date(r.scheduledFor) <= new Date())
   ).length;
 
   // Browsers block sound until a person interacts with the page once.
-  // Staff tap "Enable alerts" at the start of their shift to unlock it.
   function enableAlerts() {
-    if (!audioCtxRef.current) {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      audioCtxRef.current = new AudioCtx();
-    }
-    audioCtxRef.current.resume();
+    // Play a silent sound to unlock audio context on this device.
+    const audio = new Audio("/alert.mp3");
+    audio.volume = 0;
+    audio.play().then(() => audio.pause()).catch(() => {});
     setAlertsEnabled(true);
   }
 
-  // Loop the beep every 2 seconds for as long as any request is WAITING.
-  // Stops the moment staff accept it (status moves to PULLING) or it's cancelled.
+  // Play the alert every 3 seconds while any request is WAITING.
   useEffect(() => {
-    if (alertsEnabled && waitingCount > 0 && audioCtxRef.current) {
+    if (alertsEnabled && waitingCount > 0) {
       if (!beepIntervalRef.current) {
-        playAlertBeep(audioCtxRef.current);
+        playAlertSound();
         beepIntervalRef.current = setInterval(() => {
-          playAlertBeep(audioCtxRef.current);
-        }, 2000);
+          playAlertSound();
+        }, 3000);
       }
     } else if (beepIntervalRef.current) {
       clearInterval(beepIntervalRef.current);
