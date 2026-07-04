@@ -68,6 +68,11 @@ model Vehicle {
   // identify the car. Optional.
   photoUrl String?
 
+  // Random secret encoded in the guest-facing QR code. Lets someone with
+  // no account/login hit a public page and request this specific vehicle.
+  // Nullable so existing vehicles don't need a backfill to keep working.
+  claimToken String? @unique
+
   // Denormalized from the owner's building at creation time, so queue
   // queries can filter by building without an extra join.
   buildingId String?

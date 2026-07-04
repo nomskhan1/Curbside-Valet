@@ -1,6 +1,14 @@
 "use client";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
+import QRCode from "qrcode";
+
+// The guest-facing URL a QR code should point to for a given vehicle.
+// Falls back gracefully if a vehicle predates claimToken (shows nothing).
+function guestUrl(vehicle) {
+  if (!vehicle?.claimToken) return null;
+  return `${typeof window !== "undefined" ? window.location.origin : ""}/guest/${vehicle.claimToken}`;
+}
 
 const STATUS_LABEL = {
   WAITING: "Waiting in queue",
@@ -813,6 +821,23 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
   const [fuelTypeFilter, setFuelTypeFilter] = useState("ALL");
+  const [qrVehicle, setQrVehicle] = useState(null);
+  const [qrDataUrl, setQrDataUrl] = useState(null);
+
+  useEffect(() => {
+    if (!qrVehicle) {
+      setQrDataUrl(null);
+      return;
+    }
+    const url = guestUrl(qrVehicle);
+    if (!url) {
+      setQrDataUrl(null);
+      return;
+    }
+    QRCode.toDataURL(url, { width: 320, margin: 1 })
+      .then(setQrDataUrl)
+      .catch(() => setQrDataUrl(null));
+  }, [qrVehicle]);
   const [vehicleSearchQuery, setVehicleSearchQuery] = useState("");
   const [editVehicleId, setEditVehicleId] = useState(null);
   const [editVehicle, setEditVehicle] = useState({});
@@ -1217,6 +1242,14 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
                     <div className="queue-actions">
                       <button
                         className="mini-btn start"
+                        onClick={() => setQrVehicle(v)}
+                        disabled={!v.claimToken}
+                        title={!v.claimToken ? "This vehicle predates QR codes" : "Show guest QR code"}
+                      >
+                        QR
+                      </button>
+                      <button
+                        className="mini-btn start"
                         onClick={() =>
                           editVehicleId === v.id ? setEditVehicleId(null) : startEditVehicle(v)
                         }
@@ -1296,6 +1329,50 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
             </div>
           );
         })
+      )}
+
+      {qrVehicle && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+          onClick={() => setQrVehicle(null)}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              padding: 24,
+              textAlign: "center",
+              maxWidth: 360,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: "0 0 4px", color: "#111" }}>Ticket #{qrVehicle.ticketNumber}</h3>
+            <p style={{ margin: "0 0 16px", color: "#666", fontSize: 14 }}>
+              Guests scan this to request their car
+            </p>
+            {qrDataUrl ? (
+              <img src={qrDataUrl} alt="Guest request QR code" style={{ width: 240, height: 240 }} />
+            ) : (
+              <p style={{ color: "#666" }}>Generating…</p>
+            )}
+            <div style={{ marginTop: 16, display: "flex", gap: 8, justifyContent: "center" }}>
+              <button className="mini-btn start" onClick={() => window.print()}>
+                Print
+              </button>
+              <button className="mini-btn done" onClick={() => setQrVehicle(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

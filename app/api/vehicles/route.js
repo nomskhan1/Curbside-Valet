@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const prisma = require("../../../lib/db");
 const { getSessionFromRequest } = require("../../../lib/auth");
 
@@ -82,6 +83,9 @@ async function POST(req) {
       buildingId: owner.buildingId || null,
       fuelType: resolvedFuelType,
       photoUrl: photoUrl || null,
+      // Secret token for the guest-facing QR code — 32 hex chars, effectively
+      // unguessable. Generated once at creation and never changes.
+      claimToken: crypto.randomBytes(16).toString("hex"),
     },
   });
 
