@@ -580,6 +580,7 @@ function playAlertSound() {
 function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilterBuilding }) {
   const [requests, setRequests] = useState([]);
   const [alertsEnabled, setAlertsEnabled] = useState(false);
+  const [zoomedPhoto, setZoomedPhoto] = useState(null);
   const beepIntervalRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -716,7 +717,15 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
                     <img
                       src={r.vehicle.photoUrl}
                       alt=""
-                      style={{ width: 46, height: 46, borderRadius: 8, objectFit: "cover", flexShrink: 0 }}
+                      onClick={() => setZoomedPhoto(r.vehicle.photoUrl)}
+                      style={{
+                        width: 46,
+                        height: 46,
+                        borderRadius: 8,
+                        objectFit: "cover",
+                        flexShrink: 0,
+                        cursor: "pointer",
+                      }}
                     />
                   ) : (
                     <div className="queue-num">#{r.vehicle.ticketNumber}</div>
@@ -826,6 +835,29 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
 
       {tab === "users" && (user.role === "ADMIN" || user.role === "MANAGER") && (
         <UserAdmin currentUser={user} />
+      )}
+
+      {zoomedPhoto && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.85)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: 24,
+          }}
+          onClick={() => setZoomedPhoto(null)}
+        >
+          <img
+            src={zoomedPhoto}
+            alt="Vehicle"
+            style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 12 }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
       )}
     </>
   );
