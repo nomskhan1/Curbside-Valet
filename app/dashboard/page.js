@@ -661,6 +661,17 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
         </div>
       )}
 
+      {user.role === "STAFF" && (
+        <div className="tabs">
+          <button className={tab === "queue" ? "active" : ""} onClick={() => setTab("queue")}>
+            Queue
+          </button>
+          <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>
+            History
+          </button>
+        </div>
+      )}
+
       {user.role === "MANAGER" && (
         <div className="tabs">
           <button className={tab === "queue" ? "active" : ""} onClick={() => setTab("queue")}>
@@ -787,7 +798,7 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
         </>
       )}
 
-      {tab === "history" && user.role === "ADMIN" && <HistoryView />}
+      {tab === "history" && (user.role === "ADMIN" || user.role === "STAFF") && <HistoryView />}
 
       {tab === "vehicles" && (user.role === "ADMIN" || user.role === "MANAGER") && (
         <VehiclesView
