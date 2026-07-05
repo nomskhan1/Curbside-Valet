@@ -711,6 +711,11 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
                         </span>
                       )}
                       {vehicleLabel(r.vehicle)}
+                      {r.vehicle.section && (
+                        <span style={{ color: "var(--slate2)", marginLeft: 6, fontSize: 13 }}>
+                          · Sec {r.vehicle.section}
+                        </span>
+                      )}
                       {r.vehicle.isVisitor && (
                         <span
                           style={{
@@ -1564,6 +1569,11 @@ function HistoryView() {
               <div className="queue-info">
                 <div className="car">
                   {vehicleLabel(r.vehicle)}
+                  {r.vehicle.section && (
+                    <span style={{ color: "var(--slate2)", marginLeft: 6, fontSize: 13 }}>
+                      · Sec {r.vehicle.section}
+                    </span>
+                  )}
                   {r.vehicle.isVisitor && (
                     <span
                       style={{
