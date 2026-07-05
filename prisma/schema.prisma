@@ -78,6 +78,11 @@ model Vehicle {
   buildingId String?
   building   Building? @relation(fields: [buildingId], references: [id])
 
+  // Parking section/zone — mainly used for monthly parkers, where the
+  // "ticket number" field doubles as their decal number. Optional and
+  // freeform since section naming varies by garage.
+  section String?
+
   requests Request[]
 }
 

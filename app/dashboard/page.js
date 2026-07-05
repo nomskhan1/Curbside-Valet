@@ -1844,6 +1844,7 @@ function UserAdmin({ currentUser }) {
         color: form.vehicleColor.value,
         licensePlate: form.vehicleLicensePlate.value,
         ticketNumber: form.vehicleTicketNumber.value,
+        section: form.vehicleSection ? form.vehicleSection.value : "",
         fuelType: form.vehicleFuelType.value,
         photoUrl: photoUrl || null,
       };
@@ -1895,6 +1896,7 @@ function UserAdmin({ currentUser }) {
       color: form.color.value,
       licensePlate: form.licensePlate.value,
       ticketNumber: form.ticketNumber.value,
+      section: form.section ? form.section.value : "",
       fuelType: form.fuelType.value,
     };
     const res = await fetch("/api/vehicles", {
@@ -1948,13 +1950,176 @@ function UserAdmin({ currentUser }) {
           <label>Filter by role</label>
           <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
             <option value="ALL">All roles</option>
-            <option value="GUEST">Guest</option>
+            <option value="GUEST">Monthly parker</option>
             <option value="STAFF">Staff</option>
             {!isManager && <option value="MANAGER">Manager</option>}
             {!isManager && <option value="ADMIN">Admin</option>}
           </select>
         </div>
       </div>
+
+      {showForm ? (
+        <form onSubmit={createUser} style={{ marginTop: 18 }}>
+          <div className="field">
+            <label>Name</label>
+            <input name="name" required />
+          </div>
+          <div className="field">
+            <label>Username</label>
+            <input name="username" type="text" required />
+          </div>
+          <div className="field">
+            <label>Password</label>
+            <input name="password" type="password" required minLength={6} />
+          </div>
+          <div className="field">
+            <label>Role</label>
+            <select name="role" value={role} onChange={(e) => setRole(e.target.value)}>
+              <option value="GUEST">Monthly parker</option>
+              <option value="STAFF">Staff</option>
+              {!isManager && <option value="MANAGER">Manager</option>}
+              {!isManager && <option value="ADMIN">Admin</option>}
+            </select>
+          </div>
+          {!isManager && role !== "ADMIN" && (
+            <div className="field">
+              <label>Building</label>
+              <select name="buildingId" required>
+                <option value="" disabled>
+                  Select a building…
+                </option>
+                {buildings.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {isManager && (
+            <p style={{ fontSize: 12, color: "var(--slate2)", marginTop: -6, marginBottom: 16 }}>
+              This account will automatically be assigned to your building.
+            </p>
+          )}
+
+          {role === "GUEST" && (
+            <div className="field">
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={addVehicleNow}
+                  onChange={(e) => setAddVehicleNow(e.target.checked)}
+                  style={{ width: "auto" }}
+                />
+                Add a vehicle for this guest now
+              </label>
+            </div>
+          )}
+
+          {role === "GUEST" && addVehicleNow && (
+            <>
+              <div className="stub-divider" style={{ margin: "16px 0" }}></div>
+              <div className="field">
+                <label>Make</label>
+                <input name="vehicleMake" required />
+              </div>
+              <div className="field">
+                <label>Model</label>
+                <input name="vehicleModel" required />
+              </div>
+              <div className="field">
+                <label>Color</label>
+                <input name="vehicleColor" />
+              </div>
+              <div className="field">
+                <label>License plate</label>
+                <input name="vehicleLicensePlate" />
+              </div>
+              <div className="field">
+                <label>Vehicle type</label>
+                <select name="vehicleFuelType" defaultValue="GASOLINE">
+                  <option value="GASOLINE">Gasoline</option>
+                  <option value="ELECTRIC">Electric</option>
+                  <option value="PLUGIN_HYBRID">Plug-in Hybrid</option>
+                </select>
+              </div>
+              <div className="field">
+                <label>Decal number</label>
+                <input name="vehicleTicketNumber" required />
+              </div>
+              <div className="field">
+                <label>Section</label>
+                <input name="vehicleSection" />
+              </div>
+              <div className="field">
+                <label>Photo (optional)</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{ flex: 1 }}
+                    onClick={() => cameraInputRef.current?.click()}
+                  >
+                    📷 Take Photo
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{ flex: 1 }}
+                    onClick={() => galleryInputRef.current?.click()}
+                  >
+                    🖼️ Choose Photo
+                  </button>
+                </div>
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handlePhotoSelect}
+                  style={{ display: "none" }}
+                />
+                <input
+                  ref={galleryInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoSelect}
+                  style={{ display: "none" }}
+                />
+                {photoUploading && (
+                  <p style={{ fontSize: 12, color: "var(--slate2)", marginTop: 6 }}>Uploading...</p>
+                )}
+                {photoPreview && !photoUploading && (
+                  <img
+                    src={photoPreview}
+                    alt="Vehicle preview"
+                    style={{ marginTop: 10, maxWidth: "100%", borderRadius: 8, maxHeight: 160 }}
+                  />
+                )}
+              </div>
+              <div className="stub-divider" style={{ margin: "16px 0" }}></div>
+            </>
+          )}
+
+          <button className="btn btn-primary" type="submit" disabled={photoUploading}>
+            Create account
+          </button>
+          <button
+            className="btn btn-ghost"
+            type="button"
+            onClick={() => {
+              setShowForm(false);
+              setAddVehicleNow(false);
+            }}
+          >
+            Cancel
+          </button>
+        </form>
+      ) : (
+        <button className="btn btn-ghost" onClick={() => setShowForm(true)} style={{ marginTop: 14 }}>
+          {isManager ? "+ Add guest or staff" : "+ Add staff or admin"}
+        </button>
+      )}
 
       {users
         .filter((u) => roleFilter === "ALL" || u.role === roleFilter)
@@ -2271,165 +2436,6 @@ function UserAdmin({ currentUser }) {
         </div>
       ))}
 
-      {showForm ? (
-        <form onSubmit={createUser} style={{ marginTop: 18 }}>
-          <div className="field">
-            <label>Name</label>
-            <input name="name" required />
-          </div>
-          <div className="field">
-            <label>Username</label>
-            <input name="username" type="text" required />
-          </div>
-          <div className="field">
-            <label>Password</label>
-            <input name="password" type="password" required minLength={6} />
-          </div>
-          <div className="field">
-            <label>Role</label>
-            <select name="role" value={role} onChange={(e) => setRole(e.target.value)}>
-              <option value="GUEST">Guest</option>
-              <option value="STAFF">Staff</option>
-              {!isManager && <option value="MANAGER">Manager</option>}
-              {!isManager && <option value="ADMIN">Admin</option>}
-            </select>
-          </div>
-          {!isManager && role !== "ADMIN" && (
-            <div className="field">
-              <label>Building</label>
-              <select name="buildingId" required>
-                <option value="" disabled>
-                  Select a building…
-                </option>
-                {buildings.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          {isManager && (
-            <p style={{ fontSize: 12, color: "var(--slate2)", marginTop: -6, marginBottom: 16 }}>
-              This account will automatically be assigned to your building.
-            </p>
-          )}
-
-          {role === "GUEST" && (
-            <div className="field">
-              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={addVehicleNow}
-                  onChange={(e) => setAddVehicleNow(e.target.checked)}
-                  style={{ width: "auto" }}
-                />
-                Add a vehicle for this guest now
-              </label>
-            </div>
-          )}
-
-          {role === "GUEST" && addVehicleNow && (
-            <>
-              <div className="stub-divider" style={{ margin: "16px 0" }}></div>
-              <div className="field">
-                <label>Make</label>
-                <input name="vehicleMake" required />
-              </div>
-              <div className="field">
-                <label>Model</label>
-                <input name="vehicleModel" required />
-              </div>
-              <div className="field">
-                <label>Color</label>
-                <input name="vehicleColor" />
-              </div>
-              <div className="field">
-                <label>License plate</label>
-                <input name="vehicleLicensePlate" />
-              </div>
-              <div className="field">
-                <label>Vehicle type</label>
-                <select name="vehicleFuelType" defaultValue="GASOLINE">
-                  <option value="GASOLINE">Gasoline</option>
-                  <option value="ELECTRIC">Electric</option>
-                  <option value="PLUGIN_HYBRID">Plug-in Hybrid</option>
-                </select>
-              </div>
-              <div className="field">
-                <label>Ticket number</label>
-                <input name="vehicleTicketNumber" required />
-              </div>
-              <div className="field">
-                <label>Photo (optional)</label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    style={{ flex: 1 }}
-                    onClick={() => cameraInputRef.current?.click()}
-                  >
-                    📷 Take Photo
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    style={{ flex: 1 }}
-                    onClick={() => galleryInputRef.current?.click()}
-                  >
-                    🖼️ Choose Photo
-                  </button>
-                </div>
-                <input
-                  ref={cameraInputRef}
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  onChange={handlePhotoSelect}
-                  style={{ display: "none" }}
-                />
-                <input
-                  ref={galleryInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePhotoSelect}
-                  style={{ display: "none" }}
-                />
-                {photoUploading && (
-                  <p style={{ fontSize: 12, color: "var(--slate2)", marginTop: 6 }}>Uploading...</p>
-                )}
-                {photoPreview && !photoUploading && (
-                  <img
-                    src={photoPreview}
-                    alt="Vehicle preview"
-                    style={{ marginTop: 10, maxWidth: "100%", borderRadius: 8, maxHeight: 160 }}
-                  />
-                )}
-              </div>
-              <div className="stub-divider" style={{ margin: "16px 0" }}></div>
-            </>
-          )}
-
-          <button className="btn btn-primary" type="submit" disabled={photoUploading}>
-            Create account
-          </button>
-          <button
-            className="btn btn-ghost"
-            type="button"
-            onClick={() => {
-              setShowForm(false);
-              setAddVehicleNow(false);
-            }}
-          >
-            Cancel
-          </button>
-        </form>
-      ) : (
-        <button className="btn btn-ghost" onClick={() => setShowForm(true)} style={{ marginTop: 14 }}>
-          {isManager ? "+ Add guest or staff" : "+ Add staff or admin"}
-        </button>
-      )}
-
       {newGuestId && (
         <div className="stub" style={{ marginTop: 18 }}>
           <div className="stub-top">
@@ -2473,8 +2479,12 @@ function UserAdmin({ currentUser }) {
               </select>
             </div>
             <div className="field">
-              <label>Ticket number</label>
+              <label>Decal number</label>
               <input name="ticketNumber" required />
+            </div>
+            <div className="field">
+              <label>Section</label>
+              <input name="section" />
             </div>
             <button className="btn btn-primary" type="submit">
               Add vehicle
