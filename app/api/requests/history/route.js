@@ -1,13 +1,13 @@
 const prisma = require("../../../../lib/db");
 const { getSessionFromRequest } = require("../../../../lib/auth");
 
-// Returns the full request history (completed + cancelled), newest first.
-// Admin-only — staff use /api/requests for the live active queue instead.
+// Returns request history (completed + cancelled), newest first.
+// Admin sees every building; staff/manager see only their own building.
 // Optional query params: ?from=2026-01-01&to=2026-01-31 to filter by date.
 async function GET(req) {
   const session = getSessionFromRequest(req);
-  if (!session || session.role !== "ADMIN") {
-    return new Response(JSON.stringify({ error: "Admin access required." }), { status: 403 });
+  if (!session || !["ADMIN", "MANAGER", "STAFF"].includes(session.role)) {
+    return new Response(JSON.stringify({ error: "Staff access required." }), { status: 403 });
   }
 
   const url = new URL(req.url);
@@ -15,6 +15,13 @@ async function GET(req) {
   const toParam = url.searchParams.get("to");
 
   const where = { status: { in: ["COMPLETED", "CANCELLED"] } };
+
+  // Staff and managers only see history for their own building — same
+  // scoping the live queue uses. No buildingId means they see nothing,
+  // not everything.
+  if (session.role === "STAFF" || session.role === "MANAGER") {
+    where.vehicle = { buildingId: session.buildingId || "__none__" };
+  }
 
   if (fromParam || toParam) {
     where.createdAt = {};

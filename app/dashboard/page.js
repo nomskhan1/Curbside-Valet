@@ -26,6 +26,13 @@ const CHARGE_STATUS_LABEL = {
   CANCELLED: "Cancelled",
 };
 
+// Show just the first name in the queue — staff don't need a guest's full
+// name at a glance, and it keeps the queue line shorter.
+function firstName(fullName) {
+  if (!fullName) return "";
+  return fullName.trim().split(/\s+/)[0];
+}
+
 // Visitor cars created with just a ticket number won't have make/model on
 // file yet — fall back to a generic label instead of showing blank space.
 function vehicleLabel(vehicle) {
@@ -761,7 +768,7 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
                       )}
                     </div>
                     <div className="meta">
-                      {r.requestedBy.name}
+                      {firstName(r.requestedBy.name)}
                       {r.vehicle.building ? ` · ${r.vehicle.building.name}` : ""} ·{" "}
                       {r.type === "CHARGE" ? CHARGE_STATUS_LABEL[r.status] : STATUS_LABEL[r.status]}
                       {isFuture && (
