@@ -39,6 +39,7 @@ async function DELETE(req, { params }) {
   // Clear out completed/cancelled request history tied to this vehicle, then
   // the vehicle itself.
   await prisma.request.deleteMany({ where: { vehicleId: id } });
+  await prisma.washLog.deleteMany({ where: { vehicleId: id } });
   await prisma.vehicle.delete({ where: { id } });
 
   return new Response(JSON.stringify({ ok: true }), { status: 200 });
@@ -54,7 +55,8 @@ async function PATCH(req, { params }) {
 
   const { id } = params;
   const body = await req.json();
-  const { make, model, color, licensePlate, ticketNumber, fuelType, photoUrl } = body || {};
+  const { make, model, color, licensePlate, ticketNumber, fuelType, photoUrl, section, washDay } =
+    body || {};
 
   const vehicle = await prisma.vehicle.findUnique({ where: { id } });
   if (!vehicle) {
@@ -78,6 +80,20 @@ async function PATCH(req, { params }) {
     data.fuelType = fuelType;
   }
   if (photoUrl !== undefined) data.photoUrl = photoUrl || null;
+  if (section !== undefined) data.section = section || null;
+
+  const VALID_WASH_DAYS = [
+    "SUNDAY",
+    "MONDAY",
+    "TUESDAY",
+    "WEDNESDAY",
+    "THURSDAY",
+    "FRIDAY",
+    "SATURDAY",
+  ];
+  if (washDay !== undefined) {
+    data.washDay = VALID_WASH_DAYS.includes(washDay) ? washDay : null;
+  }
 
   if (ticketNumber && ticketNumber !== vehicle.ticketNumber) {
     const existing = await prisma.vehicle.findUnique({ where: { ticketNumber } });
