@@ -657,6 +657,9 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
           <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>
             History
           </button>
+          <button className={tab === "carwash" ? "active" : ""} onClick={() => setTab("carwash")}>
+            Car Wash
+          </button>
           <button className={tab === "buildings" ? "active" : ""} onClick={() => setTab("buildings")}>
             Buildings
           </button>
@@ -677,6 +680,9 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
           <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>
             History
           </button>
+          <button className={tab === "carwash" ? "active" : ""} onClick={() => setTab("carwash")}>
+            Car Wash
+          </button>
         </div>
       )}
 
@@ -684,6 +690,9 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
         <div className="tabs">
           <button className={tab === "queue" ? "active" : ""} onClick={() => setTab("queue")}>
             Queue
+          </button>
+          <button className={tab === "carwash" ? "active" : ""} onClick={() => setTab("carwash")}>
+            Car Wash
           </button>
           <button className={tab === "vehicles" ? "active" : ""} onClick={() => setTab("vehicles")}>
             Vehicles
@@ -815,6 +824,8 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
       )}
 
       {tab === "history" && (user.role === "ADMIN" || user.role === "STAFF") && <HistoryView />}
+
+      {tab === "carwash" && <CarWashView user={user} />}
 
       {tab === "vehicles" && (user.role === "ADMIN" || user.role === "MANAGER") && (
         <VehiclesView
@@ -950,6 +961,7 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
       licensePlate: form.licensePlate.value,
       ticketNumber: form.ticketNumber.value,
       fuelType: form.fuelType.value,
+      washDay: form.washDay.value || null,
       photoUrl: photoUrl || null,
     };
     const res = await fetch("/api/vehicles", {
@@ -971,6 +983,7 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
     form.licensePlate.value = "";
     form.ticketNumber.value = "";
     form.fuelType.value = "GASOLINE";
+    form.washDay.value = "";
     setPhotoPreview(null);
     setPhotoUrl(null);
     setAddVehicleSuccess(true);
@@ -998,6 +1011,7 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
       licensePlate: v.licensePlate || "",
       ticketNumber: v.ticketNumber || "",
       fuelType: v.fuelType || "GASOLINE",
+      washDay: v.washDay || "",
     });
     setEditVehicleError("");
   }
@@ -1100,6 +1114,19 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
           <div className="field">
             <label>Ticket number</label>
             <input name="ticketNumber" required />
+          </div>
+          <div className="field">
+            <label>Wash day (optional)</label>
+            <select name="washDay" defaultValue="">
+              <option value="">Not enrolled</option>
+              <option value="SUNDAY">Sunday</option>
+              <option value="MONDAY">Monday</option>
+              <option value="TUESDAY">Tuesday</option>
+              <option value="WEDNESDAY">Wednesday</option>
+              <option value="THURSDAY">Thursday</option>
+              <option value="FRIDAY">Friday</option>
+              <option value="SATURDAY">Saturday</option>
+            </select>
           </div>
           <div className="field">
             <label>Photo (optional)</label>
@@ -1373,6 +1400,22 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
                           onChange={(e) => setEditVehicle({ ...editVehicle, ticketNumber: e.target.value })}
                         />
                       </div>
+                      <div className="field">
+                        <label>Wash day (optional)</label>
+                        <select
+                          value={editVehicle.washDay}
+                          onChange={(e) => setEditVehicle({ ...editVehicle, washDay: e.target.value })}
+                        >
+                          <option value="">Not enrolled</option>
+                          <option value="SUNDAY">Sunday</option>
+                          <option value="MONDAY">Monday</option>
+                          <option value="TUESDAY">Tuesday</option>
+                          <option value="WEDNESDAY">Wednesday</option>
+                          <option value="THURSDAY">Thursday</option>
+                          <option value="FRIDAY">Friday</option>
+                          <option value="SATURDAY">Saturday</option>
+                        </select>
+                      </div>
                       <button className="mini-btn start" onClick={() => saveEditVehicle(v.id)}>
                         Save changes
                       </button>
@@ -1547,6 +1590,212 @@ function BuildingsView({ onSelectBuilding }) {
 }
 
 // ---------------- ADMIN: HISTORY ----------------
+// ---------------- CAR WASH ----------------
+function todayLocalDateString() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function CarWashView({ user }) {
+  const isManagerOrAdmin = user.role === "ADMIN" || user.role === "MANAGER";
+  const [subTab, setSubTab] = useState("today"); // "today" | "report"
+  const [date, setDate] = useState(todayLocalDateString());
+  const [washes, setWashes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [initialsDraft, setInitialsDraft] = useState({}); // vehicleId -> typed initials
+  const [savingId, setSavingId] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const res = await fetch(`/api/washes?date=${date}`);
+    const data = await res.json();
+    setWashes(Array.isArray(data) ? data : []);
+    setLoading(false);
+  }, [date]);
+
+  useEffect(() => {
+    if (subTab === "today") load();
+  }, [subTab, load]);
+
+  async function markComplete(vehicleId) {
+    const initials = (initialsDraft[vehicleId] || "").trim();
+    if (!initials) {
+      setError("Enter initials before marking complete.");
+      return;
+    }
+    setError("");
+    setSavingId(vehicleId);
+    const res = await fetch("/api/washes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ vehicleId, date, initials }),
+    });
+    const data = await res.json();
+    setSavingId(null);
+    if (!res.ok) {
+      setError(data.error);
+      return;
+    }
+    load();
+  }
+
+  return (
+    <>
+      <div className="queue-header">
+        <h1 className="title" style={{ marginBottom: 2 }}>
+          Car Wash
+        </h1>
+      </div>
+
+      {isManagerOrAdmin && (
+        <div className="tabs" style={{ marginBottom: 16 }}>
+          <button className={subTab === "today" ? "active" : ""} onClick={() => setSubTab("today")}>
+            Daily list
+          </button>
+          <button className={subTab === "report" ? "active" : ""} onClick={() => setSubTab("report")}>
+            Report
+          </button>
+        </div>
+      )}
+
+      {subTab === "today" && (
+        <>
+          <div className="field" style={{ maxWidth: 220 }}>
+            <label>Date</label>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
+
+          {error && <div className="error-box">{error}</div>}
+
+          {loading ? null : washes.length === 0 ? (
+            <div className="empty-state">
+              <div className="big">No washes scheduled</div>
+              No vehicles are enrolled for this day.
+            </div>
+          ) : (
+            washes.map((v) => (
+              <div key={v.id} className="queue-item">
+                <div className="queue-num">#{v.ticketNumber}</div>
+                <div className="queue-info">
+                  <div className="car">
+                    {[v.color, v.make, v.model].filter(Boolean).join(" ") || "Vehicle"}
+                    {v.section && (
+                      <span style={{ color: "var(--slate2)", marginLeft: 6, fontSize: 13 }}>
+                        · Sec {v.section}
+                      </span>
+                    )}
+                  </div>
+                  <div className="meta">
+                    {firstName(v.owner?.name)}
+                    {v.building ? ` · ${v.building.name}` : ""}
+                  </div>
+                </div>
+                {v.completed ? (
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <div style={{ color: "var(--green)", fontWeight: 600, fontSize: 13 }}>Done</div>
+                    <div style={{ color: "var(--slate2)", fontSize: 12 }}>{v.completed.initials}</div>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    <input
+                      placeholder="Initials"
+                      value={initialsDraft[v.id] || ""}
+                      onChange={(e) => setInitialsDraft({ ...initialsDraft, [v.id]: e.target.value })}
+                      style={{
+                        width: 64,
+                        background: "var(--bg-2)",
+                        border: "1px solid var(--line)",
+                        borderRadius: 6,
+                        padding: "8px 6px",
+                        color: "var(--ink)",
+                        fontSize: 13,
+                        textTransform: "uppercase",
+                      }}
+                      maxLength={4}
+                    />
+                    <button
+                      className="mini-btn ready"
+                      disabled={savingId === v.id}
+                      onClick={() => markComplete(v.id)}
+                    >
+                      {savingId === v.id ? "…" : "Done"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </>
+      )}
+
+      {subTab === "report" && isManagerOrAdmin && <CarWashReportView />}
+    </>
+  );
+}
+
+function CarWashReportView() {
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const params = new URLSearchParams();
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    const res = await fetch(`/api/washes/report?${params.toString()}`);
+    const data = await res.json();
+    setLogs(Array.isArray(data) ? data : []);
+    setLoading(false);
+  }, [from, to]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  return (
+    <>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+        <div className="field" style={{ flex: 1, minWidth: 140 }}>
+          <label>From</label>
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+        </div>
+        <div className="field" style={{ flex: 1, minWidth: 140 }}>
+          <label>To</label>
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+        </div>
+      </div>
+
+      {loading ? null : logs.length === 0 ? (
+        <div className="empty-state">
+          <div className="big">No washes logged</div>
+          Try a different date range.
+        </div>
+      ) : (
+        logs.map((log) => (
+          <div key={log.id} className="list-row">
+            <span>
+              #{log.vehicle?.ticketNumber} — {firstName(log.vehicle?.owner?.name)}
+              {log.vehicle?.building ? ` · ${log.vehicle.building.name}` : ""}
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ color: "var(--slate2)", fontSize: 12 }}>
+                {new Date(log.washDate).toLocaleDateString()}
+              </span>
+              <span className="role-tag">{log.initials}</span>
+            </span>
+          </div>
+        ))
+      )}
+    </>
+  );
+}
+
 function HistoryView() {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1776,6 +2025,7 @@ function UserAdmin({ currentUser }) {
       licensePlate: form.licensePlate.value,
       ticketNumber: form.ticketNumber.value,
       fuelType: form.fuelType.value,
+      washDay: form.washDay ? form.washDay.value || null : null,
     };
     const res = await fetch("/api/vehicles", {
       method: "POST",
@@ -1905,6 +2155,7 @@ function UserAdmin({ currentUser }) {
         licensePlate: form.vehicleLicensePlate.value,
         ticketNumber: form.vehicleTicketNumber.value,
         section: form.vehicleSection ? form.vehicleSection.value : "",
+        washDay: form.vehicleWashDay ? form.vehicleWashDay.value || null : null,
         fuelType: form.vehicleFuelType.value,
         photoUrl: photoUrl || null,
       };
@@ -2110,6 +2361,19 @@ function UserAdmin({ currentUser }) {
               <div className="field">
                 <label>Section</label>
                 <input name="vehicleSection" />
+              </div>
+              <div className="field">
+                <label>Wash day (optional)</label>
+                <select name="vehicleWashDay" defaultValue="">
+                  <option value="">Not enrolled</option>
+                  <option value="SUNDAY">Sunday</option>
+                  <option value="MONDAY">Monday</option>
+                  <option value="TUESDAY">Tuesday</option>
+                  <option value="WEDNESDAY">Wednesday</option>
+                  <option value="THURSDAY">Thursday</option>
+                  <option value="FRIDAY">Friday</option>
+                  <option value="SATURDAY">Saturday</option>
+                </select>
               </div>
               <div className="field">
                 <label>Photo (optional)</label>
@@ -2439,6 +2703,19 @@ function UserAdmin({ currentUser }) {
                       <div className="field">
                         <label>Ticket number</label>
                         <input name="ticketNumber" required />
+                      </div>
+                      <div className="field">
+                        <label>Wash day (optional)</label>
+                        <select name="washDay" defaultValue="">
+                          <option value="">Not enrolled</option>
+                          <option value="SUNDAY">Sunday</option>
+                          <option value="MONDAY">Monday</option>
+                          <option value="TUESDAY">Tuesday</option>
+                          <option value="WEDNESDAY">Wednesday</option>
+                          <option value="THURSDAY">Thursday</option>
+                          <option value="FRIDAY">Friday</option>
+                          <option value="SATURDAY">Saturday</option>
+                        </select>
                       </div>
                       <button className="btn btn-primary" type="submit">
                         Add vehicle

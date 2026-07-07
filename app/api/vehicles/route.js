@@ -40,7 +40,7 @@ async function POST(req) {
   }
 
   const body = await req.json();
-  const { make, model, color, licensePlate, ticketNumber, ownerId, fuelType, photoUrl, section } = body || {};
+  const { make, model, color, licensePlate, ticketNumber, ownerId, fuelType, photoUrl, section, washDay } = body || {};
 
   if (!make || !model || !ticketNumber || !ownerId) {
     return new Response(
@@ -51,6 +51,9 @@ async function POST(req) {
 
   const VALID_FUEL_TYPES = ["GASOLINE", "ELECTRIC", "PLUGIN_HYBRID"];
   const resolvedFuelType = VALID_FUEL_TYPES.includes(fuelType) ? fuelType : "GASOLINE";
+
+  const VALID_WASH_DAYS = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
+  const resolvedWashDay = VALID_WASH_DAYS.includes(washDay) ? washDay : null;
 
   const owner = await prisma.user.findUnique({ where: { id: ownerId } });
   if (!owner) {
@@ -84,6 +87,7 @@ async function POST(req) {
       fuelType: resolvedFuelType,
       photoUrl: photoUrl || null,
       section: section || null,
+      washDay: resolvedWashDay,
       // Secret token for the guest-facing QR code — 32 hex chars, effectively
       // unguessable. Generated once at creation and never changes.
       claimToken: crypto.randomBytes(16).toString("hex"),

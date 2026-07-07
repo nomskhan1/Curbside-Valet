@@ -43,6 +43,7 @@ model User {
   vehicles        Vehicle[]
   requests        Request[] @relation("RequestedBy")
   handledRequests Request[] @relation("HandledBy")
+  washLogs        WashLog[]
 }
 
 model Vehicle {
@@ -83,7 +84,38 @@ model Vehicle {
   // freeform since section naming varies by garage.
   section String?
 
-  requests Request[]
+  // Recurring weekly car wash day assigned at registration, e.g. "TUESDAY".
+  // Null means this vehicle isn't enrolled in car wash service.
+  washDay String?
+
+  requests  Request[]
+  washLogs  WashLog[]
+}
+
+model WashLog {
+  id        String   @id @default(cuid())
+  vehicleId String
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id])
+
+  // The calendar date the wash was completed (not just the weekday, so a
+  // report can show an actual timeline and duplicates on the same date can
+  // be prevented).
+  washDate DateTime
+
+  // Staff type their own initials at completion time, rather than the
+  // system auto-filling from their account — matches how a paper log would
+  // normally work.
+  initials String
+
+  // Whoever was logged in when this was submitted — lets a manager/admin
+  // trace back to an account even though "initials" is the primary record,
+  // and supports the "manager/admin can override" requirement.
+  completedById String?
+  completedBy   User?    @relation(fields: [completedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([vehicleId, washDate])
 }
 
 model Request {
