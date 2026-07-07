@@ -1609,6 +1609,65 @@ function CarWashView({ user }) {
   const [initialsDraft, setInitialsDraft] = useState({}); // vehicleId -> typed initials
   const [savingId, setSavingId] = useState(null);
 
+  const [showManual, setShowManual] = useState(false);
+  const [manualQuery, setManualQuery] = useState("");
+  const [manualVehicles, setManualVehicles] = useState([]);
+  const [manualSelectedId, setManualSelectedId] = useState("");
+  const [manualDate, setManualDate] = useState(todayLocalDateString());
+  const [manualInitials, setManualInitials] = useState("");
+  const [manualError, setManualError] = useState("");
+  const [manualSaving, setManualSaving] = useState(false);
+
+  useEffect(() => {
+    if (!showManual) return;
+    fetch("/api/vehicles")
+      .then((res) => res.json())
+      .then((data) => setManualVehicles(Array.isArray(data) ? data : []))
+      .catch(() => setManualVehicles([]));
+  }, [showManual]);
+
+  const manualMatches = manualQuery.trim()
+    ? manualVehicles.filter((v) => {
+        const q = manualQuery.toLowerCase();
+        return (
+          (v.ticketNumber || "").toLowerCase().includes(q) ||
+          (v.licensePlate || "").toLowerCase().includes(q) ||
+          (v.make || "").toLowerCase().includes(q) ||
+          (v.model || "").toLowerCase().includes(q) ||
+          (v.owner?.name || "").toLowerCase().includes(q)
+        );
+      })
+    : [];
+
+  async function submitManualEntry() {
+    if (!manualSelectedId) {
+      setManualError("Pick a vehicle first.");
+      return;
+    }
+    if (!manualInitials.trim()) {
+      setManualError("Enter initials.");
+      return;
+    }
+    setManualError("");
+    setManualSaving(true);
+    const res = await fetch("/api/washes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ vehicleId: manualSelectedId, date: manualDate, initials: manualInitials }),
+    });
+    const data = await res.json();
+    setManualSaving(false);
+    if (!res.ok) {
+      setManualError(data.error);
+      return;
+    }
+    setManualQuery("");
+    setManualSelectedId("");
+    setManualInitials("");
+    setShowManual(false);
+    if (manualDate === date) load();
+  }
+
   const load = useCallback(async () => {
     setLoading(true);
     const res = await fetch(`/api/washes?date=${date}`);
@@ -1668,6 +1727,94 @@ function CarWashView({ user }) {
             <label>Date</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
+
+          {!showManual ? (
+            <button className="btn btn-ghost" onClick={() => setShowManual(true)} style={{ marginBottom: 16 }}>
+              + Add manual entry
+            </button>
+          ) : (
+            <div className="stub" style={{ marginBottom: 16 }}>
+              <div className="stub-num-label">Manual wash entry</div>
+              <p style={{ fontSize: 12, color: "var(--slate2)", marginTop: -4, marginBottom: 12 }}>
+                For a vehicle not on today's schedule, or logging a different date.
+              </p>
+
+              {manualError && <div className="error-box">{manualError}</div>}
+
+              <div className="field">
+                <label>Find vehicle</label>
+                <input
+                  placeholder="Ticket #, plate, make/model, or name"
+                  value={manualQuery}
+                  onChange={(e) => {
+                    setManualQuery(e.target.value);
+                    setManualSelectedId("");
+                  }}
+                />
+              </div>
+
+              {manualQuery.trim() && !manualSelectedId && (
+                <div style={{ marginBottom: 12, maxHeight: 200, overflowY: "auto" }}>
+                  {manualMatches.length === 0 ? (
+                    <p style={{ fontSize: 13, color: "var(--slate2)" }}>No matches.</p>
+                  ) : (
+                    manualMatches.slice(0, 20).map((v) => (
+                      <div
+                        key={v.id}
+                        onClick={() => {
+                          setManualSelectedId(v.id);
+                          setManualQuery(
+                            `#${v.ticketNumber} — ${[v.color, v.make, v.model].filter(Boolean).join(" ")}`
+                          );
+                        }}
+                        style={{
+                          padding: "8px 10px",
+                          border: "1px solid var(--line)",
+                          borderRadius: 6,
+                          marginBottom: 6,
+                          cursor: "pointer",
+                          fontSize: 13,
+                        }}
+                      >
+                        #{v.ticketNumber} — {[v.color, v.make, v.model].filter(Boolean).join(" ")}
+                        {v.owner?.name ? ` · ${v.owner.name}` : ""}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              <div className="field">
+                <label>Wash date</label>
+                <input type="date" value={manualDate} onChange={(e) => setManualDate(e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Initials</label>
+                <input
+                  value={manualInitials}
+                  onChange={(e) => setManualInitials(e.target.value)}
+                  maxLength={4}
+                  style={{ textTransform: "uppercase", maxWidth: 100 }}
+                />
+              </div>
+
+              <button className="btn btn-primary" disabled={manualSaving} onClick={submitManualEntry}>
+                {manualSaving ? "Saving…" : "Log wash"}
+              </button>
+              <button
+                className="btn btn-ghost"
+                onClick={() => {
+                  setShowManual(false);
+                  setManualQuery("");
+                  setManualSelectedId("");
+                  setManualInitials("");
+                  setManualError("");
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
 
           {error && <div className="error-box">{error}</div>}
 
