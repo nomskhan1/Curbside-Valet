@@ -1737,6 +1737,31 @@ function CarWashView({ user }) {
   );
 }
 
+// Prints via a hidden iframe on the same page — more reliable across
+// desktop and mobile browsers than window.open() popups.
+function printHtmlViaIframe(html) {
+  let iframe = document.getElementById("__wash_print_iframe");
+  if (!iframe) {
+    iframe = document.createElement("iframe");
+    iframe.id = "__wash_print_iframe";
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+  }
+  const doc = iframe.contentWindow.document;
+  doc.open();
+  doc.write(html);
+  doc.close();
+  iframe.onload = () => {
+    iframe.contentWindow.focus();
+    iframe.contentWindow.print();
+  };
+}
+
 function CarWashReportView() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -1758,6 +1783,50 @@ function CarWashReportView() {
     load();
   }, [load]);
 
+  const tally = {};
+  logs.forEach((log) => {
+    const key = log.initials || "—";
+    tally[key] = (tally[key] || 0) + 1;
+  });
+  const tallyRows = Object.entries(tally).sort((a, b) => b[1] - a[1]);
+
+  function printReport() {
+    const rangeLabel = from || to ? `${from || "…"} to ${to || "…"}` : "All dates";
+    const tallyHtml = tallyRows
+      .map(
+        ([initials, count]) =>
+          `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #ddd;"><span>${initials}</span><span>${count} vehicle${count === 1 ? "" : "s"}</span></div>`
+      )
+      .join("");
+    const detailHtml = logs
+      .map((log) => {
+        const owner = log.vehicle?.owner?.name ? log.vehicle.owner.name.split(" ")[0] : "";
+        return `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid #eee;">
+          <span>#${log.vehicle?.ticketNumber || ""} — ${owner}${log.vehicle?.building ? " · " + log.vehicle.building.name : ""}</span>
+          <span>${new Date(log.washDate).toLocaleDateString()} · ${log.initials}</span>
+        </div>`;
+      })
+      .join("");
+
+    const html = `<!DOCTYPE html><html><head>
+      <title>Car Wash Report</title>
+      <style>
+        body { font-family: Arial, sans-serif; color: #111; padding: 24px; }
+        h1 { font-size: 20px; margin: 0 0 4px; }
+        h2 { font-size: 15px; margin: 20px 0 8px; }
+        .sub { color: #666; font-size: 13px; margin-bottom: 20px; }
+      </style>
+      </head><body>
+        <h1>Car Wash Report</h1>
+        <div class="sub">${rangeLabel} · ${logs.length} total wash${logs.length === 1 ? "" : "es"}</div>
+        <h2>By employee</h2>
+        ${tallyHtml || "<p>No washes in this range.</p>"}
+        <h2>Detail</h2>
+        ${detailHtml || "<p>No washes in this range.</p>"}
+      </body></html>`;
+    printHtmlViaIframe(html);
+  }
+
   return (
     <>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
@@ -1770,6 +1839,24 @@ function CarWashReportView() {
           <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
         </div>
       </div>
+
+      <button className="btn btn-ghost" onClick={printReport} style={{ marginBottom: 16 }}>
+        Print report
+      </button>
+
+      {!loading && tallyRows.length > 0 && (
+        <div className="stub" style={{ marginBottom: 16 }}>
+          <div className="stub-num-label">By employee</div>
+          {tallyRows.map(([initials, count]) => (
+            <div className="stub-row" key={initials}>
+              <span>{initials}</span>
+              <span>
+                {count} vehicle{count === 1 ? "" : "s"}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {loading ? null : logs.length === 0 ? (
         <div className="empty-state">
