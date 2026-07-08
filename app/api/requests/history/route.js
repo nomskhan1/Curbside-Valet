@@ -24,19 +24,29 @@ async function GET(req) {
   }
 
   if (fromParam || toParam) {
-    where.createdAt = {};
+    // Filter by when the request was actually completed/cancelled, not
+    // when it was originally created — a request made late one day and
+    // completed the next should show up under the day it finished.
+    // completedAt isn't set for cancelled requests, so fall back to
+    // updatedAt (the moment the status last changed) for those.
+    //
+    // -06:00 is US Central Standard Time — matches Integral Revenue's day
+    // boundary. During Central Daylight Time this is off by an hour at the
+    // day's edges, which is fine for a same-day report but flag it if exact
+    // DST handling matters.
+    const dateFilter = {};
     if (fromParam) {
-      const fromDate = new Date(fromParam);
-      if (!isNaN(fromDate.getTime())) where.createdAt.gte = fromDate;
+      const fromDate = new Date(`${fromParam}T00:00:00-06:00`);
+      if (!isNaN(fromDate.getTime())) dateFilter.gte = fromDate;
     }
     if (toParam) {
-      // Include the whole "to" day by pushing to the end of that day.
-      const toDate = new Date(toParam);
-      if (!isNaN(toDate.getTime())) {
-        toDate.setHours(23, 59, 59, 999);
-        where.createdAt.lte = toDate;
-      }
+      const toDate = new Date(`${toParam}T23:59:59-06:00`);
+      if (!isNaN(toDate.getTime())) dateFilter.lte = toDate;
     }
+    where.OR = [
+      { status: "COMPLETED", completedAt: dateFilter },
+      { status: "CANCELLED", updatedAt: dateFilter },
+    ];
   }
 
   const history = await prisma.request.findMany({
