@@ -889,6 +889,7 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
   const [fuelTypeFilter, setFuelTypeFilter] = useState("ALL");
   const [qrVehicle, setQrVehicle] = useState(null);
   const [qrDataUrl, setQrDataUrl] = useState(null);
+  const [zoomedPhoto, setZoomedPhoto] = useState(null);
 
   useEffect(() => {
     if (!qrVehicle) {
@@ -1002,6 +1003,10 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
     load();
   }
 
+  const [editPhotoUploading, setEditPhotoUploading] = useState(false);
+  const editCameraInputRef = useRef(null);
+  const editGalleryInputRef = useRef(null);
+
   function startEditVehicle(v) {
     setEditVehicleId(v.id);
     setEditVehicle({
@@ -1012,8 +1017,34 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
       ticketNumber: v.ticketNumber || "",
       fuelType: v.fuelType || "GASOLINE",
       washDay: v.washDay || "",
+      photoUrl: v.photoUrl || null,
     });
     setEditVehicleError("");
+  }
+
+  async function handleEditPhotoSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setEditVehicleError("");
+    setEditPhotoUploading(true);
+    try {
+      const dataUrl = await resizeImageFile(file);
+      const res = await fetch("/api/vehicles/upload-photo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: dataUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setEditVehicleError(data.error);
+        return;
+      }
+      setEditVehicle((prev) => ({ ...prev, photoUrl: data.url }));
+    } catch (err) {
+      setEditVehicleError("Couldn't process that image. Try a different photo.");
+    } finally {
+      setEditPhotoUploading(false);
+    }
   }
 
   async function saveEditVehicle(id) {
@@ -1061,6 +1092,51 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
   const visibleGroups =
     filterBuilding === "all" ? Object.keys(grouped).sort() : [filterBuilding];
 
+  function printVehicleList() {
+    const sections = visibleGroups
+      .map((groupName) => {
+        const list = grouped[groupName] || [];
+        const rows = list
+          .map(
+            (v) => `
+          <tr>
+            <td>${v.ticketNumber || ""}</td>
+            <td>${[v.color, v.make, v.model].filter(Boolean).join(" ") || "—"}</td>
+            <td>${v.licensePlate || "—"}</td>
+            <td>${v.section || "—"}</td>
+            <td>${v.washDay ? v.washDay.charAt(0) + v.washDay.slice(1).toLowerCase() : "—"}</td>
+            <td>${v.owner?.name || "—"}</td>
+          </tr>`
+          )
+          .join("");
+        return `
+          <h2>${groupName} (${list.length})</h2>
+          <table>
+            <thead><tr><th>Ticket #</th><th>Vehicle</th><th>Plate</th><th>Section</th><th>Wash day</th><th>Owner</th></tr></thead>
+            <tbody>${rows || `<tr><td colspan="6">No vehicles.</td></tr>`}</tbody>
+          </table>`;
+      })
+      .join("");
+
+    const html = `<!DOCTYPE html><html><head>
+      <title>Registered Vehicles</title>
+      <style>
+        body { font-family: Arial, sans-serif; color: #111; padding: 24px; }
+        h1 { font-size: 20px; margin: 0 0 4px; }
+        h2 { font-size: 15px; margin: 24px 0 8px; }
+        .sub { color: #666; font-size: 13px; margin-bottom: 8px; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #ddd; }
+        th { background: #f2f2f2; }
+      </style>
+      </head><body>
+        <h1>Registered Vehicles</h1>
+        <div class="sub">${fuelFilteredVehicles.length} total · printed ${new Date().toLocaleString()}</div>
+        ${sections}
+      </body></html>`;
+    printHtmlViaIframe(html);
+  }
+
   return (
     <>
       <div className="queue-header">
@@ -1069,6 +1145,10 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
         </h1>
         <span className="count-badge">{fuelFilteredVehicles.length} total</span>
       </div>
+
+      <button className="btn btn-ghost" onClick={printVehicleList} style={{ marginBottom: 16 }}>
+        Print list
+      </button>
 
       {error && <div className="error-box">{error}</div>}
 
@@ -1271,7 +1351,15 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
                       <img
                         src={v.photoUrl}
                         alt=""
-                        style={{ width: 46, height: 46, borderRadius: 8, objectFit: "cover", flexShrink: 0 }}
+                        onClick={() => setZoomedPhoto(v.photoUrl)}
+                        style={{
+                          width: 46,
+                          height: 46,
+                          borderRadius: 8,
+                          objectFit: "cover",
+                          flexShrink: 0,
+                          cursor: "pointer",
+                        }}
                       />
                     ) : (
                       <div className="queue-num">#{v.ticketNumber}</div>
@@ -1354,6 +1442,52 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
                   {editVehicleId === v.id && (
                     <div style={{ padding: "10px 0 14px", borderBottom: "1px solid var(--line)" }}>
                       {editVehicleError && <div className="error-box">{editVehicleError}</div>}
+                      <div className="field">
+                        <label>Photo</label>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            style={{ flex: 1 }}
+                            onClick={() => editCameraInputRef.current?.click()}
+                          >
+                            📷 Take Photo
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            style={{ flex: 1 }}
+                            onClick={() => editGalleryInputRef.current?.click()}
+                          >
+                            🖼️ Choose Photo
+                          </button>
+                        </div>
+                        <input
+                          ref={editCameraInputRef}
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={handleEditPhotoSelect}
+                          style={{ display: "none" }}
+                        />
+                        <input
+                          ref={editGalleryInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleEditPhotoSelect}
+                          style={{ display: "none" }}
+                        />
+                        {editPhotoUploading && (
+                          <p style={{ fontSize: 12, color: "var(--slate2)", marginTop: 6 }}>Uploading...</p>
+                        )}
+                        {editVehicle.photoUrl && !editPhotoUploading && (
+                          <img
+                            src={editVehicle.photoUrl}
+                            alt="Vehicle preview"
+                            style={{ marginTop: 10, maxWidth: "100%", borderRadius: 8, maxHeight: 160 }}
+                          />
+                        )}
+                      </div>
                       <div className="field">
                         <label>Make</label>
                         <input
@@ -1470,6 +1604,29 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {zoomedPhoto && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.85)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: 24,
+          }}
+          onClick={() => setZoomedPhoto(null)}
+        >
+          <img
+            src={zoomedPhoto}
+            alt="Vehicle"
+            style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 12 }}
+            onClick={(e) => e.stopPropagation()}
+          />
         </div>
       )}
     </>
