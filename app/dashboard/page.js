@@ -2350,6 +2350,52 @@ function HistoryView() {
     CANCELLED: { label: "Cancelled", color: "var(--red)" },
   };
 
+  function downloadCsv() {
+    const headers = [
+      "Ticket #",
+      "Vehicle",
+      "Plate",
+      "Building",
+      "Requested by",
+      "Type",
+      "Status",
+      "Requested at",
+      "Completed/Cancelled at",
+    ];
+    const rows = history.map((r) => [
+      r.vehicle?.ticketNumber || "",
+      vehicleLabel(r.vehicle) || "",
+      r.vehicle?.licensePlate || "",
+      r.vehicle?.building?.name || "",
+      r.requestedBy?.name || "",
+      r.type === "CHARGE" ? "Charging" : "Pickup",
+      STATUS_BADGE[r.status]?.label || r.status,
+      new Date(r.createdAt).toLocaleString(),
+      r.completedAt
+        ? new Date(r.completedAt).toLocaleString()
+        : r.updatedAt
+        ? new Date(r.updatedAt).toLocaleString()
+        : "",
+    ]);
+
+    const escapeCsv = (val) => {
+      const str = String(val ?? "");
+      return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+    };
+
+    const csv = [headers, ...rows].map((row) => row.map(escapeCsv).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const rangeLabel = fromDate || toDate ? `${fromDate || "start"}_to_${toDate || "end"}` : "all";
+    a.href = url;
+    a.download = `request-history-${rangeLabel}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <>
       <div className="queue-header">
@@ -2380,6 +2426,14 @@ function HistoryView() {
             Clear
           </button>
         )}
+        <button
+          className="btn btn-ghost"
+          style={{ width: "auto", alignSelf: "flex-end", padding: "13px 16px" }}
+          onClick={downloadCsv}
+          disabled={history.length === 0}
+        >
+          Download CSV
+        </button>
       </div>
 
       {loading ? null : history.length === 0 ? (
