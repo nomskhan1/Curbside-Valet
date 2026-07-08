@@ -248,6 +248,17 @@ function GuestView({ user }) {
   const [scheduleMode, setScheduleMode] = useState(false);
   const [scheduledFor, setScheduledFor] = useState("");
   const [showChargeForm, setShowChargeForm] = useState(false);
+  const [zoomedPhoto, setZoomedPhoto] = useState(null);
+  const remindedRequestIds = useRef(new Set());
+
+  // Ask for OS notification permission once, quietly — if the browser/
+  // platform doesn't support it (e.g. some in-app WebViews), this just
+  // silently does nothing and the in-app banner below still works.
+  useEffect(() => {
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {});
+    }
+  }, []);
 
   const load = useCallback(async () => {
     const [vRes, rRes] = await Promise.all([fetch("/api/vehicles"), fetch("/api/requests")]);
@@ -269,6 +280,31 @@ function GuestView({ user }) {
   const activeChargeRequests = requests.filter(
     (r) => r.type === "CHARGE" && ["WAITING", "PULLING", "READY"].includes(r.status)
   );
+
+  // Fire a one-time reminder (OS notification if available, always the
+  // in-app banner below) once a scheduled pickup is within 10 minutes.
+  useEffect(() => {
+    if (!activeRequest || !activeRequest.scheduledFor) return;
+    const msUntil = new Date(activeRequest.scheduledFor).getTime() - Date.now();
+    const withinTenMinutes = msUntil > 0 && msUntil <= 10 * 60 * 1000;
+    if (withinTenMinutes && !remindedRequestIds.current.has(activeRequest.id)) {
+      remindedRequestIds.current.add(activeRequest.id);
+      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+        try {
+          new Notification("Pickup coming up", {
+            body: `Ticket #${activeRequest.vehicle.ticketNumber} is scheduled in about 10 minutes.`,
+          });
+        } catch {}
+      }
+    }
+  }, [activeRequest, requests]);
+
+  const minutesUntilScheduled =
+    activeRequest && activeRequest.scheduledFor
+      ? Math.round((new Date(activeRequest.scheduledFor).getTime() - Date.now()) / 60000)
+      : null;
+  const showReminderBanner =
+    minutesUntilScheduled !== null && minutesUntilScheduled > 0 && minutesUntilScheduled <= 10;
 
   async function submitRequest(payload) {
     setError("");
@@ -354,14 +390,48 @@ function GuestView({ user }) {
       <>
         <div className="hero-line">Ticket received</div>
         <h1 className="title">{isFuture ? "Pickup scheduled" : "We're on it"}</h1>
-        <div className="stub">
+        {isFuture && showReminderBanner && (
+          <div
+            style={{
+              background: "rgba(124,106,216,0.12)",
+              border: "1px solid #7C6AD8",
+              color: "#7C6AD8",
+              borderRadius: 8,
+              padding: "10px 14px",
+              fontSize: 13,
+              marginBottom: 16,
+              fontWeight: 600,
+            }}
+          >
+            ⏰ Coming up in about {minutesUntilScheduled} minute{minutesUntilScheduled === 1 ? "" : "s"} —
+            have your car ready.
+          </div>
+        )}
+        <div className="stub" style={isFuture ? { borderColor: "#7C6AD8" } : undefined}>
           <div className="stub-top">
-            <div>
-              <div className="stub-num-label">Ticket</div>
-              <div className="stub-num">{activeRequest.vehicle.ticketNumber}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {activeRequest.vehicle.photoUrl && (
+                <img
+                  src={activeRequest.vehicle.photoUrl}
+                  alt=""
+                  onClick={() => setZoomedPhoto(activeRequest.vehicle.photoUrl)}
+                  style={{ width: 52, height: 52, borderRadius: 8, objectFit: "cover", cursor: "pointer" }}
+                />
+              )}
+              <div>
+                <div className="stub-num-label">Ticket</div>
+                <div className="stub-num">{activeRequest.vehicle.ticketNumber}</div>
+              </div>
             </div>
-            <span className={`status-pill status-${activeRequest.status}`}>
-              <span className="dot"></span>
+            <span
+              className={`status-pill status-${activeRequest.status}`}
+              style={
+                isFuture
+                  ? { background: "rgba(124,106,216,0.12)", borderColor: "#7C6AD8", color: "#7C6AD8" }
+                  : undefined
+              }
+            >
+              <span className="dot" style={isFuture ? { background: "#7C6AD8" } : undefined}></span>
               {isFuture ? "Scheduled" : STATUS_LABEL[activeRequest.status]}
             </span>
           </div>
@@ -405,7 +475,16 @@ function GuestView({ user }) {
         .filter((v) => !v.isVisitor)
         .map((v) => (
         <div key={v.id} className="queue-item">
-          <div className="queue-num">#{v.ticketNumber}</div>
+          {v.photoUrl ? (
+            <img
+              src={v.photoUrl}
+              alt=""
+              onClick={() => setZoomedPhoto(v.photoUrl)}
+              style={{ width: 46, height: 46, borderRadius: 8, objectFit: "cover", flexShrink: 0, cursor: "pointer" }}
+            />
+          ) : (
+            <div className="queue-num">#{v.ticketNumber}</div>
+          )}
           <div className="queue-info">
             <div className="car">
               {vehicleLabel(v)}
@@ -441,7 +520,12 @@ function GuestView({ user }) {
           />
         )}
       </div>
+      </>
+    );
+  }
 
+  const visitorRequestSection = (
+    <>
       <div className="stub-divider" style={{ margin: "22px 0" }}></div>
 
       {showTicketForm ? (
@@ -465,9 +549,8 @@ function GuestView({ user }) {
           Request a visitor's car instead
         </button>
       )}
-      </>
-    );
-  }
+    </>
+  );
 
   const chargeSection = (
     <>
@@ -561,7 +644,31 @@ function GuestView({ user }) {
     <>
       {error && <div className="error-box">{error}</div>}
       {pickupSection}
+      {visitorRequestSection}
       {chargeSection}
+
+      {zoomedPhoto && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.85)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: 24,
+          }}
+          onClick={() => setZoomedPhoto(null)}
+        >
+          <img
+            src={zoomedPhoto}
+            alt="Vehicle"
+            style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 12 }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </>
   );
 }
@@ -724,7 +831,15 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
             requests.map((r) => {
               const isFuture = r.scheduledFor && new Date(r.scheduledFor) > new Date();
               return (
-                <div key={r.id} className="queue-item">
+                <div
+                  key={r.id}
+                  className="queue-item"
+                  style={
+                    isFuture
+                      ? { borderColor: "#7C6AD8", background: "rgba(124,106,216,0.06)" }
+                      : undefined
+                  }
+                >
                   {r.vehicle.photoUrl ? (
                     <img
                       src={r.vehicle.photoUrl}
