@@ -683,6 +683,9 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
           <button className={tab === "carwash" ? "active" : ""} onClick={() => setTab("carwash")}>
             Car Wash
           </button>
+          <button className={tab === "vehicles" ? "active" : ""} onClick={() => setTab("vehicles")}>
+            Vehicles
+          </button>
         </div>
       )}
 
@@ -827,7 +830,7 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
 
       {tab === "carwash" && <CarWashView user={user} />}
 
-      {tab === "vehicles" && (user.role === "ADMIN" || user.role === "MANAGER") && (
+      {tab === "vehicles" && (user.role === "ADMIN" || user.role === "MANAGER" || user.role === "STAFF") && (
         <VehiclesView
           filterBuilding={vehiclesFilterBuilding}
           setFilterBuilding={setVehiclesFilterBuilding}
@@ -875,7 +878,8 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
 }
 
 // ---------------- ADMIN: VEHICLES ----------------
-function VehiclesView({ filterBuilding, setFilterBuilding }) {
+function VehiclesView({ filterBuilding, setFilterBuilding, currentUser }) {
+  const isStaff = currentUser?.role === "STAFF";
   const [vehicles, setVehicles] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1152,7 +1156,7 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
 
       {error && <div className="error-box">{error}</div>}
 
-      {showAddForm ? (
+      {!isStaff && (showAddForm ? (
         <form onSubmit={addVehicle} style={{ marginBottom: 22 }}>
           <div className="field">
             <label>Owner (guest)</label>
@@ -1279,7 +1283,7 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
         <button className="btn btn-ghost" onClick={() => setShowAddForm(true)} style={{ marginBottom: 22 }}>
           + Add a vehicle for a guest
         </button>
-      )}
+      ))}
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
         <div className="field" style={{ flex: 1, minWidth: 160 }}>
@@ -1409,34 +1413,36 @@ function VehiclesView({ filterBuilding, setFilterBuilding }) {
                         {v.licensePlate || "No plate on file"} · owner: {v.owner?.name} ({v.owner?.username})
                       </div>
                     </div>
-                    <div className="queue-actions">
-                      <button
-                        className="mini-btn start"
-                        onClick={() => setQrVehicle(v)}
-                        disabled={!v.claimToken}
-                        title={!v.claimToken ? "This vehicle predates QR codes" : "Show guest QR code"}
-                      >
-                        QR
-                      </button>
-                      <button
-                        className="mini-btn start"
-                        onClick={() =>
-                          editVehicleId === v.id ? setEditVehicleId(null) : startEditVehicle(v)
-                        }
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="mini-btn done"
-                        onClick={() => {
-                          if (window.confirm(`Remove vehicle #${v.ticketNumber}? This can't be undone.`)) {
-                            removeVehicle(v.id);
+                    {!isStaff && (
+                      <div className="queue-actions">
+                        <button
+                          className="mini-btn start"
+                          onClick={() => setQrVehicle(v)}
+                          disabled={!v.claimToken}
+                          title={!v.claimToken ? "This vehicle predates QR codes" : "Show guest QR code"}
+                        >
+                          QR
+                        </button>
+                        <button
+                          className="mini-btn start"
+                          onClick={() =>
+                            editVehicleId === v.id ? setEditVehicleId(null) : startEditVehicle(v)
                           }
-                        }}
-                      >
-                        Remove
-                      </button>
-                    </div>
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="mini-btn done"
+                          onClick={() => {
+                            if (window.confirm(`Remove vehicle #${v.ticketNumber}? This can't be undone.`)) {
+                              removeVehicle(v.id);
+                            }
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {editVehicleId === v.id && (
