@@ -40,7 +40,7 @@ async function POST(req) {
   }
 
   const body = await req.json();
-  const { make, model, color, licensePlate, ticketNumber, ownerId, fuelType, photoUrl, section, washDay } = body || {};
+  const { make, model, color, licensePlate, ticketNumber, ownerId, fuelType, photoUrl, section, washDay, location } = body || {};
 
   if (!make || !model || !ticketNumber || !ownerId) {
     return new Response(
@@ -87,6 +87,7 @@ async function POST(req) {
       fuelType: resolvedFuelType,
       photoUrl: photoUrl || null,
       section: section || null,
+      location: location || null,
       washDay: resolvedWashDay,
       // Secret token for the guest-facing QR code — 32 hex chars, effectively
       // unguessable. Generated once at creation and never changes.

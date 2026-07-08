@@ -55,7 +55,7 @@ async function PATCH(req, { params }) {
 
   const { id } = params;
   const body = await req.json();
-  const { make, model, color, licensePlate, ticketNumber, fuelType, photoUrl, section, washDay } =
+  const { make, model, color, licensePlate, ticketNumber, fuelType, photoUrl, section, washDay, location } =
     body || {};
 
   const vehicle = await prisma.vehicle.findUnique({ where: { id } });
@@ -81,6 +81,7 @@ async function PATCH(req, { params }) {
   }
   if (photoUrl !== undefined) data.photoUrl = photoUrl || null;
   if (section !== undefined) data.section = section || null;
+  if (location !== undefined) data.location = location || null;
 
   const VALID_WASH_DAYS = [
     "SUNDAY",

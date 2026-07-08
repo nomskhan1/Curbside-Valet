@@ -84,6 +84,10 @@ model Vehicle {
   // freeform since section naming varies by garage.
   section String?
 
+  // Specific parking spot/location within the garage (e.g. "Level 2, Spot 14").
+  // Freeform since layouts vary by garage.
+  location String?
+
   // Recurring weekly car wash day assigned at registration, e.g. "TUESDAY".
   // Null means this vehicle isn't enrolled in car wash service.
   washDay String?

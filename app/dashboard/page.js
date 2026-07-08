@@ -967,6 +967,7 @@ function VehiclesView({ filterBuilding, setFilterBuilding, currentUser }) {
       ticketNumber: form.ticketNumber.value,
       fuelType: form.fuelType.value,
       washDay: form.washDay.value || null,
+      location: form.location.value || null,
       photoUrl: photoUrl || null,
     };
     const res = await fetch("/api/vehicles", {
@@ -1021,6 +1022,7 @@ function VehiclesView({ filterBuilding, setFilterBuilding, currentUser }) {
       ticketNumber: v.ticketNumber || "",
       fuelType: v.fuelType || "GASOLINE",
       washDay: v.washDay || "",
+      location: v.location || "",
       photoUrl: v.photoUrl || null,
     });
     setEditVehicleError("");
@@ -1107,6 +1109,7 @@ function VehiclesView({ filterBuilding, setFilterBuilding, currentUser }) {
             <td>${v.ticketNumber || ""}</td>
             <td>${[v.color, v.make, v.model].filter(Boolean).join(" ") || "—"}</td>
             <td>${v.licensePlate || "—"}</td>
+            <td>${v.location || "—"}</td>
             <td>${v.section || "—"}</td>
             <td>${v.washDay ? v.washDay.charAt(0) + v.washDay.slice(1).toLowerCase() : "—"}</td>
             <td>${v.owner?.name || "—"}</td>
@@ -1116,8 +1119,8 @@ function VehiclesView({ filterBuilding, setFilterBuilding, currentUser }) {
         return `
           <h2>${groupName} (${list.length})</h2>
           <table>
-            <thead><tr><th>Ticket #</th><th>Vehicle</th><th>Plate</th><th>Section</th><th>Wash day</th><th>Owner</th></tr></thead>
-            <tbody>${rows || `<tr><td colspan="6">No vehicles.</td></tr>`}</tbody>
+            <thead><tr><th>Decal #</th><th>Vehicle</th><th>Plate</th><th>Location</th><th>Section</th><th>Wash day</th><th>Owner</th></tr></thead>
+            <tbody>${rows || `<tr><td colspan="7">No vehicles.</td></tr>`}</tbody>
           </table>`;
       })
       .join("");
@@ -1196,8 +1199,12 @@ function VehiclesView({ filterBuilding, setFilterBuilding, currentUser }) {
             </select>
           </div>
           <div className="field">
-            <label>Ticket number</label>
+            <label>Decal #</label>
             <input name="ticketNumber" required />
+          </div>
+          <div className="field">
+            <label>Location (optional)</label>
+            <input name="location" placeholder="e.g. Level 2, Spot 14" />
           </div>
           <div className="field">
             <label>Wash day (optional)</label>
@@ -1366,12 +1373,12 @@ function VehiclesView({ filterBuilding, setFilterBuilding, currentUser }) {
                         }}
                       />
                     ) : (
-                      <div className="queue-num">#{v.ticketNumber}</div>
+                      <div className="queue-num" title="Decal #">#{v.ticketNumber}</div>
                     )}
                     <div className="queue-info">
                       <div className="car">
                         {v.photoUrl && (
-                          <span style={{ color: "var(--brass-light)", marginRight: 6 }}>
+                          <span style={{ color: "var(--brass-light)", marginRight: 6 }} title="Decal #">
                             #{v.ticketNumber}
                           </span>
                         )}
@@ -1410,7 +1417,8 @@ function VehiclesView({ filterBuilding, setFilterBuilding, currentUser }) {
                         )}
                       </div>
                       <div className="meta">
-                        {v.licensePlate || "No plate on file"} · owner: {v.owner?.name} ({v.owner?.username})
+                        {v.licensePlate || "No plate on file"}
+                        {v.location && ` · ${v.location}`} · owner: {v.owner?.name} ({v.owner?.username})
                       </div>
                     </div>
                     {!isStaff && (
@@ -1534,10 +1542,18 @@ function VehiclesView({ filterBuilding, setFilterBuilding, currentUser }) {
                         </select>
                       </div>
                       <div className="field">
-                        <label>Ticket number</label>
+                        <label>Decal #</label>
                         <input
                           value={editVehicle.ticketNumber}
                           onChange={(e) => setEditVehicle({ ...editVehicle, ticketNumber: e.target.value })}
+                        />
+                      </div>
+                      <div className="field">
+                        <label>Location (optional)</label>
+                        <input
+                          value={editVehicle.location || ""}
+                          onChange={(e) => setEditVehicle({ ...editVehicle, location: e.target.value })}
+                          placeholder="e.g. Level 2, Spot 14"
                         />
                       </div>
                       <div className="field">
@@ -1592,7 +1608,7 @@ function VehiclesView({ filterBuilding, setFilterBuilding, currentUser }) {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 style={{ margin: "0 0 4px", color: "#111" }}>Ticket #{qrVehicle.ticketNumber}</h3>
+            <h3 style={{ margin: "0 0 4px", color: "#111" }}>Decal #{qrVehicle.ticketNumber}</h3>
             <p style={{ margin: "0 0 16px", color: "#666", fontSize: 14 }}>
               Guests scan this to request their car
             </p>
