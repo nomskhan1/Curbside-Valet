@@ -17,24 +17,14 @@ async function GET(req) {
   return new Response(JSON.stringify(buildings), { status: 200 });
 }
 
+// Creating new garages/buildings is Super Admin's job now (see
+// /api/superadmin/buildings) — Admin can view and manage the buildings
+// they're already assigned to, but can no longer add new ones.
 async function POST(req) {
-  const session = getSessionFromRequest(req);
-  if (!session || session.role !== "ADMIN") {
-    return new Response(JSON.stringify({ error: "Admin access required." }), { status: 403 });
-  }
-
-  const body = await req.json();
-  const { name, address } = body || {};
-
-  if (!name) {
-    return new Response(JSON.stringify({ error: "Building name is required." }), { status: 400 });
-  }
-
-  const building = await prisma.building.create({
-    data: { name, address: address || null },
-  });
-
-  return new Response(JSON.stringify(building), { status: 201 });
+  return new Response(
+    JSON.stringify({ error: "Only Super Admin can add new buildings." }),
+    { status: 403 }
+  );
 }
 
 module.exports = { GET, POST };

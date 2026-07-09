@@ -2116,10 +2116,10 @@ function BuildingsView({ onSelectBuilding }) {
       </div>
       {error && <div className="error-box">{error}</div>}
 
-      {buildings.length === 0 && !showForm && (
+      {buildings.length === 0 && (
         <div className="empty-state">
           <div className="big">No buildings yet</div>
-          Add your first property to start assigning staff and guests to it.
+          Ask your Super Admin to add a garage and assign it to your account.
         </div>
       )}
 
@@ -2147,28 +2147,6 @@ function BuildingsView({ onSelectBuilding }) {
         </div>
       ))}
 
-      {showForm ? (
-        <form onSubmit={addBuilding} style={{ marginTop: 18 }}>
-          <div className="field">
-            <label>Building name</label>
-            <input name="name" placeholder="e.g. The Meridian Tower" required />
-          </div>
-          <div className="field">
-            <label>Address (optional)</label>
-            <input name="address" placeholder="123 Main St" />
-          </div>
-          <button className="btn btn-primary" type="submit">
-            Save building
-          </button>
-          <button className="btn btn-ghost" type="button" onClick={() => setShowForm(false)}>
-            Cancel
-          </button>
-        </form>
-      ) : (
-        <button className="btn btn-ghost" onClick={() => setShowForm(true)} style={{ marginTop: 14 }}>
-          + Add a building
-        </button>
-      )}
     </>
   );
 }
