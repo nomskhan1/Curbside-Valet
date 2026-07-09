@@ -118,12 +118,34 @@ export default function Dashboard() {
 
   return (
     <div className="shell">
-      <header className="topbar">
+      <header className="topbar" style={{ position: "relative" }}>
         <div className="brand">
           <img src="/logo.png" alt="" className="logo" />
-          <span className="mark">Integral{brandingBuildingName ? ` ${brandingBuildingName}` : ""}</span>
-          <span className="sub">{user.name} · {user.role}</span>
+          <div>
+            <div className="mark">Integral Valet</div>
+            <span className="sub">{user.name} · {user.role}</span>
+          </div>
         </div>
+        {brandingBuildingName && (
+          <div
+            style={{
+              position: "absolute",
+              left: "50%",
+              top: "50%",
+              transform: "translate(-50%, -50%)",
+              fontFamily: '"Oswald", sans-serif',
+              fontWeight: 600,
+              fontSize: 18,
+              letterSpacing: "0.02em",
+              textTransform: "uppercase",
+              color: "var(--ink)",
+              whiteSpace: "nowrap",
+              pointerEvents: "none",
+            }}
+          >
+            {brandingBuildingName}
+          </div>
+        )}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {brandingLogoUrl && (
             <img
