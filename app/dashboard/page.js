@@ -118,7 +118,7 @@ export default function Dashboard() {
 
   return (
     <div className="shell">
-      <header className="topbar" style={{ position: "relative" }}>
+      <header className="topbar" style={{ position: "relative", flexWrap: "wrap", rowGap: 6 }}>
         <div className="brand">
           <img src="/logo.png" alt="" className="logo" />
           <div>
@@ -128,19 +128,18 @@ export default function Dashboard() {
         </div>
         {brandingBuildingName && (
           <div
+            className="header-building-name"
             style={{
-              position: "absolute",
-              left: "50%",
-              top: "50%",
-              transform: "translate(-50%, -50%)",
               fontFamily: '"Oswald", sans-serif',
               fontWeight: 600,
-              fontSize: 18,
+              fontSize: 16,
               letterSpacing: "0.02em",
               textTransform: "uppercase",
               color: "var(--ink)",
               whiteSpace: "nowrap",
-              pointerEvents: "none",
+              order: 3,
+              width: "100%",
+              textAlign: "center",
             }}
           >
             {brandingBuildingName}
