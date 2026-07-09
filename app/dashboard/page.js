@@ -122,7 +122,7 @@ export default function Dashboard() {
             <img
               src={brandingLogoUrl}
               alt=""
-              style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover" }}
+              style={{ height: 32, maxWidth: 90, borderRadius: 4, objectFit: "contain" }}
             />
           )}
           <button className="btn-ghost" style={{ width: "auto", padding: "8px 14px", borderRadius: 20, fontSize: 11 }} onClick={logout}>
