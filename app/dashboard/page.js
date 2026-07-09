@@ -113,13 +113,22 @@ export default function Dashboard() {
     <div className="shell">
       <header className="topbar">
         <div className="brand">
-          <img src={brandingLogoUrl || "/logo.png"} alt="" className="logo" />
+          <img src="/logo.png" alt="" className="logo" />
           <span className="mark">Integral</span>
           <span className="sub">{user.role}</span>
         </div>
-        <button className="btn-ghost" style={{ width: "auto", padding: "8px 14px", borderRadius: 20, fontSize: 11 }} onClick={logout}>
-          Sign out
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {brandingLogoUrl && (
+            <img
+              src={brandingLogoUrl}
+              alt=""
+              style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover" }}
+            />
+          )}
+          <button className="btn-ghost" style={{ width: "auto", padding: "8px 14px", borderRadius: 20, fontSize: 11 }} onClick={logout}>
+            Sign out
+          </button>
+        </div>
       </header>
       <main>
         {user.role === "GUEST" && <GuestView user={user} />}
