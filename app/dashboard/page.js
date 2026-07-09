@@ -114,6 +114,7 @@ export default function Dashboard() {
       </header>
       <main>
         {user.role === "GUEST" && <GuestView user={user} />}
+        {user.role === "SUPER_ADMIN" && <SuperAdminView />}
         {(user.role === "STAFF" || user.role === "MANAGER" || user.role === "ADMIN") && (
           <StaffView
             user={user}
@@ -240,6 +241,263 @@ function ChangePasswordPanel({ onClose }) {
 }
 
 // ---------------- GUEST ----------------
+// ---------------- SUPER ADMIN ----------------
+// Deliberately narrow: create garages (with logo) and create the Admin
+// account for each one. Nothing else — no queue, no vehicles, no requests.
+function SuperAdminView() {
+  const [buildings, setBuildings] = useState([]);
+  const [admins, setAdmins] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const [showAddBuilding, setShowAddBuilding] = useState(false);
+  const [logoPreview, setLogoPreview] = useState(null);
+  const [logoUrl, setLogoUrl] = useState(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const logoInputRef = useRef(null);
+
+  const [showAddAdmin, setShowAddAdmin] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [bRes, aRes] = await Promise.all([
+      fetch("/api/superadmin/buildings"),
+      fetch("/api/superadmin/admins"),
+    ]);
+    setBuildings(await bRes.json());
+    setAdmins(await aRes.json());
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function handleLogoSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError("");
+    setLogoUploading(true);
+    try {
+      const dataUrl = await resizeImageFile(file);
+      setLogoPreview(dataUrl);
+      const res = await fetch("/api/superadmin/upload-logo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: dataUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error);
+        setLogoPreview(null);
+        return;
+      }
+      setLogoUrl(data.url);
+    } catch {
+      setError("Couldn't process that image. Try a different photo.");
+      setLogoPreview(null);
+    } finally {
+      setLogoUploading(false);
+    }
+  }
+
+  async function createBuilding(e) {
+    e.preventDefault();
+    setError("");
+    const form = e.target;
+    const res = await fetch("/api/superadmin/buildings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: form.name.value,
+        address: form.address.value,
+        logoUrl,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error);
+      return;
+    }
+    form.reset();
+    setLogoPreview(null);
+    setLogoUrl(null);
+    setShowAddBuilding(false);
+    load();
+  }
+
+  async function createAdmin(e) {
+    e.preventDefault();
+    setError("");
+    const form = e.target;
+    const res = await fetch("/api/superadmin/admins", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: form.name.value,
+        username: form.username.value,
+        password: form.password.value,
+        buildingId: form.buildingId.value,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error);
+      return;
+    }
+    form.reset();
+    setShowAddAdmin(false);
+    load();
+  }
+
+  return (
+    <>
+      <div className="queue-header">
+        <h1 className="title" style={{ marginBottom: 2 }}>
+          Garages
+        </h1>
+        <span className="count-badge">{buildings.length} total</span>
+      </div>
+
+      {error && <div className="error-box">{error}</div>}
+
+      {!showAddBuilding ? (
+        <button className="btn btn-ghost" onClick={() => setShowAddBuilding(true)} style={{ marginBottom: 22 }}>
+          + Add a garage
+        </button>
+      ) : (
+        <form onSubmit={createBuilding} style={{ marginBottom: 22 }}>
+          <div className="field">
+            <label>Garage name</label>
+            <input name="name" required />
+          </div>
+          <div className="field">
+            <label>Address (optional)</label>
+            <input name="address" />
+          </div>
+          <div className="field">
+            <label>Logo (optional)</label>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => logoInputRef.current?.click()}
+            >
+              🖼️ Choose Logo
+            </button>
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleLogoSelect}
+              style={{ display: "none" }}
+            />
+            {logoUploading && (
+              <p style={{ fontSize: 12, color: "var(--slate2)", marginTop: 6 }}>Uploading...</p>
+            )}
+            {logoPreview && !logoUploading && (
+              <img
+                src={logoPreview}
+                alt="Logo preview"
+                style={{ marginTop: 10, maxWidth: 160, borderRadius: 8 }}
+              />
+            )}
+          </div>
+          <button className="btn btn-primary" type="submit" disabled={logoUploading}>
+            Create garage
+          </button>
+          <button
+            className="btn btn-ghost"
+            type="button"
+            onClick={() => {
+              setShowAddBuilding(false);
+              setLogoPreview(null);
+              setLogoUrl(null);
+            }}
+          >
+            Cancel
+          </button>
+        </form>
+      )}
+
+      {loading ? null : (
+        buildings.map((b) => (
+          <div key={b.id} className="list-row" style={{ alignItems: "center" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {b.logoUrl && (
+                <img src={b.logoUrl} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover" }} />
+              )}
+              {b.name}
+            </span>
+            <span className="role-tag">
+              {b.users.length > 0 ? `Admin: ${b.users[0].name}` : "No admin assigned"}
+            </span>
+          </div>
+        ))
+      )}
+
+      <div className="stub-divider" style={{ margin: "26px 0" }}></div>
+
+      <div className="queue-header">
+        <h1 className="title" style={{ marginBottom: 2, fontSize: 22 }}>
+          Admins
+        </h1>
+        <span className="count-badge">{admins.length} total</span>
+      </div>
+
+      {!showAddAdmin ? (
+        <button className="btn btn-ghost" onClick={() => setShowAddAdmin(true)} style={{ marginBottom: 22 }}>
+          + Add an admin
+        </button>
+      ) : (
+        <form onSubmit={createAdmin} style={{ marginBottom: 22 }}>
+          <div className="field">
+            <label>Name</label>
+            <input name="name" required />
+          </div>
+          <div className="field">
+            <label>Username</label>
+            <input name="username" required />
+          </div>
+          <div className="field">
+            <label>Password</label>
+            <input name="password" type="password" required minLength={6} />
+          </div>
+          <div className="field">
+            <label>Garage</label>
+            <select name="buildingId" required>
+              <option value="" disabled>
+                Select a garage…
+              </option>
+              {buildings.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button className="btn btn-primary" type="submit">
+            Create admin
+          </button>
+          <button className="btn btn-ghost" type="button" onClick={() => setShowAddAdmin(false)}>
+            Cancel
+          </button>
+        </form>
+      )}
+
+      {loading ? null : (
+        admins.map((a) => (
+          <div key={a.id} className="list-row">
+            <span>
+              {a.name} ({a.username})
+            </span>
+            <span className="role-tag">{a.building?.name || "No garage"}</span>
+          </div>
+        ))
+      )}
+    </>
+  );
+}
+
 function GuestView({ user }) {
   const [vehicles, setVehicles] = useState([]);
   const [requests, setRequests] = useState([]);

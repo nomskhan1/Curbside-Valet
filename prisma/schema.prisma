@@ -23,6 +23,9 @@ model Building {
   address   String?
   createdAt DateTime @default(now())
 
+  // Uploaded by Super Admin when creating/branding a garage.
+  logoUrl String?
+
   users    User[]
   vehicles Vehicle[]
 }
