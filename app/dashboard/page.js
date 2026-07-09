@@ -80,6 +80,7 @@ export default function Dashboard() {
   const [showPasswordPanel, setShowPasswordPanel] = useState(false);
   const [vehiclesFilterBuilding, setVehiclesFilterBuilding] = useState("all");
   const [brandingLogoUrl, setBrandingLogoUrl] = useState(null);
+  const [brandingBuildingName, setBrandingBuildingName] = useState(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -97,8 +98,14 @@ export default function Dashboard() {
     if (!user) return;
     fetch("/api/branding")
       .then((r) => r.json())
-      .then((d) => setBrandingLogoUrl(d.logoUrl || null))
-      .catch(() => setBrandingLogoUrl(null));
+      .then((d) => {
+        setBrandingLogoUrl(d.logoUrl || null);
+        setBrandingBuildingName(d.buildingName || null);
+      })
+      .catch(() => {
+        setBrandingLogoUrl(null);
+        setBrandingBuildingName(null);
+      });
   }, [user]);
 
   async function logout() {
@@ -114,8 +121,8 @@ export default function Dashboard() {
       <header className="topbar">
         <div className="brand">
           <img src="/logo.png" alt="" className="logo" />
-          <span className="mark">Integral</span>
-          <span className="sub">{user.role}</span>
+          <span className="mark">Integral{brandingBuildingName ? ` ${brandingBuildingName}` : ""}</span>
+          <span className="sub">{user.name} · {user.role}</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {brandingLogoUrl && (
