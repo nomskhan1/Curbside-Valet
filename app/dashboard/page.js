@@ -79,6 +79,7 @@ export default function Dashboard() {
   const [tab, setTab] = useState("queue"); // staff/admin: "queue" | "users" (admin only)
   const [showPasswordPanel, setShowPasswordPanel] = useState(false);
   const [vehiclesFilterBuilding, setVehiclesFilterBuilding] = useState("all");
+  const [brandingLogoUrl, setBrandingLogoUrl] = useState(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -92,6 +93,14 @@ export default function Dashboard() {
       });
   }, [router]);
 
+  useEffect(() => {
+    if (!user) return;
+    fetch("/api/branding")
+      .then((r) => r.json())
+      .then((d) => setBrandingLogoUrl(d.logoUrl || null))
+      .catch(() => setBrandingLogoUrl(null));
+  }, [user]);
+
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.replace("/login");
@@ -104,7 +113,7 @@ export default function Dashboard() {
     <div className="shell">
       <header className="topbar">
         <div className="brand">
-          <img src="/logo.png" alt="" className="logo" />
+          <img src={brandingLogoUrl || "/logo.png"} alt="" className="logo" />
           <span className="mark">Integral</span>
           <span className="sub">{user.role}</span>
         </div>
@@ -122,6 +131,7 @@ export default function Dashboard() {
             setTab={setTab}
             vehiclesFilterBuilding={vehiclesFilterBuilding}
             setVehiclesFilterBuilding={setVehiclesFilterBuilding}
+            onLogoUpdated={setBrandingLogoUrl}
           />
         )}
 
@@ -942,7 +952,7 @@ function playAlertSound() {
   } catch {}
 }
 
-function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilterBuilding }) {
+function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilterBuilding, onLogoUpdated }) {
   const [requests, setRequests] = useState([]);
   const [alertsEnabled, setAlertsEnabled] = useState(false);
   const [zoomedPhoto, setZoomedPhoto] = useState(null);
@@ -1034,6 +1044,9 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
           <button className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}>
             Users
           </button>
+          <button className={tab === "branding" ? "active" : ""} onClick={() => setTab("branding")}>
+            Branding
+          </button>
         </div>
       )}
 
@@ -1070,6 +1083,9 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
           </button>
           <button className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}>
             Users
+          </button>
+          <button className={tab === "branding" ? "active" : ""} onClick={() => setTab("branding")}>
+            Branding
           </button>
         </div>
       )}
@@ -1225,6 +1241,10 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
 
       {tab === "users" && (user.role === "ADMIN" || user.role === "MANAGER") && (
         <UserAdmin currentUser={user} />
+      )}
+
+      {tab === "branding" && (user.role === "ADMIN" || user.role === "MANAGER") && (
+        <BrandingView onLogoUpdated={onLogoUpdated} />
       )}
 
       {zoomedPhoto && (
@@ -2580,6 +2600,99 @@ function CarWashReportView() {
             </span>
           </div>
         ))
+      )}
+    </>
+  );
+}
+
+// ---------------- BRANDING ----------------
+function BrandingView({ onLogoUpdated }) {
+  const [logoUrl, setLogoUrl] = useState(null);
+  const [buildingName, setBuildingName] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    fetch("/api/branding")
+      .then((r) => r.json())
+      .then((d) => {
+        setLogoUrl(d.logoUrl || null);
+        setBuildingName(d.buildingName || null);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function handleSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError("");
+    setUploading(true);
+    try {
+      const dataUrl = await resizeImageFile(file);
+      const res = await fetch("/api/branding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: dataUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error);
+        return;
+      }
+      setLogoUrl(data.logoUrl);
+      if (onLogoUpdated) onLogoUpdated(data.logoUrl);
+    } catch {
+      setError("Couldn't process that image. Try a different photo.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="queue-header">
+        <h1 className="title" style={{ marginBottom: 2 }}>
+          Branding
+        </h1>
+      </div>
+
+      {loading ? null : (
+        <>
+          <p style={{ fontSize: 13, color: "var(--slate2)", marginBottom: 16 }}>
+            {buildingName
+              ? `Logo shown in the header for everyone at ${buildingName}.`
+              : "Your account isn't assigned to a building yet — ask an admin to assign one before setting a logo."}
+          </p>
+
+          {error && <div className="error-box">{error}</div>}
+
+          {logoUrl && (
+            <div className="stub" style={{ marginBottom: 16, textAlign: "center" }}>
+              <img src={logoUrl} alt="Current logo" style={{ maxWidth: 160, maxHeight: 160, borderRadius: 8 }} />
+            </div>
+          )}
+
+          {buildingName && (
+            <>
+              <button
+                className="btn btn-primary"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+              >
+                {uploading ? "Uploading…" : logoUrl ? "Replace logo" : "Upload logo"}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleSelect}
+                style={{ display: "none" }}
+              />
+            </>
+          )}
+        </>
       )}
     </>
   );
