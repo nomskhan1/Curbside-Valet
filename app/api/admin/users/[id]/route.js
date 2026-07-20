@@ -3,8 +3,8 @@ const { getSessionFromRequest } = require("../../../../../lib/auth");
 
 async function DELETE(req, { params }) {
   const session = getSessionFromRequest(req);
-  if (!session || session.role !== "ADMIN") {
-    return new Response(JSON.stringify({ error: "Admin access required." }), { status: 403 });
+  if (!session || (session.role !== "ADMIN" && session.role !== "MANAGER")) {
+    return new Response(JSON.stringify({ error: "Admin or manager access required." }), { status: 403 });
   }
 
   const { id } = params;
@@ -18,6 +18,22 @@ async function DELETE(req, { params }) {
   const target = await prisma.user.findUnique({ where: { id } });
   if (!target) {
     return new Response(JSON.stringify({ error: "Account not found." }), { status: 404 });
+  }
+
+  // Managers can only remove guest/staff accounts in their own building.
+  if (session.role === "MANAGER") {
+    if (!["GUEST", "STAFF"].includes(target.role)) {
+      return new Response(
+        JSON.stringify({ error: "Managers can only remove guest or staff accounts." }),
+        { status: 403 }
+      );
+    }
+    if (target.buildingId !== session.buildingId) {
+      return new Response(
+        JSON.stringify({ error: "You can only remove accounts in your own building." }),
+        { status: 403 }
+      );
+    }
   }
 
   // Admin can remove an account even if it owns vehicles or has request
