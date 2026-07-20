@@ -1513,7 +1513,10 @@ function VehiclesView({ filterBuilding, setFilterBuilding, currentUser }) {
         (v.licensePlate || "").toLowerCase().includes(q) ||
         (v.make || "").toLowerCase().includes(q) ||
         (v.model || "").toLowerCase().includes(q) ||
-        (v.ticketNumber || "").toLowerCase().includes(q)
+        (v.ticketNumber || "").toLowerCase().includes(q) ||
+        (v.owner?.name || "").toLowerCase().includes(q) ||
+        (v.section || "").toLowerCase().includes(q) ||
+        (v.location || "").toLowerCase().includes(q)
       );
     });
 
@@ -1727,10 +1730,10 @@ function VehiclesView({ filterBuilding, setFilterBuilding, currentUser }) {
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
         <div className="field" style={{ flex: 1, minWidth: 160 }}>
-          <label>Search by plate, make, or model</label>
+          <label>Search by name, plate, make, decal, section or location</label>
           <input
             type="text"
-            placeholder="e.g. 8XJ-201 or Tesla"
+            placeholder="e.g. Johnson, Tesla, B89, Level 2"
             value={vehicleSearchQuery}
             onChange={(e) => setVehicleSearchQuery(e.target.value)}
           />
@@ -2198,6 +2201,7 @@ function CarWashView({ user }) {
   const [error, setError] = useState("");
   const [initialsDraft, setInitialsDraft] = useState({}); // vehicleId -> typed initials
   const [savingId, setSavingId] = useState(null);
+  const [zoomedPhoto, setZoomedPhoto] = useState(null);
 
   const [showManual, setShowManual] = useState(false);
   const [manualQuery, setManualQuery] = useState("");
@@ -2416,7 +2420,16 @@ function CarWashView({ user }) {
           ) : (
             washes.map((v) => (
               <div key={v.id} className="queue-item">
-                <div className="queue-num">#{v.ticketNumber}</div>
+                {v.photoUrl ? (
+                  <img
+                    src={v.photoUrl}
+                    alt=""
+                    onClick={() => setZoomedPhoto(v.photoUrl)}
+                    style={{ width: 46, height: 46, borderRadius: 8, objectFit: "cover", flexShrink: 0, cursor: "pointer" }}
+                  />
+                ) : (
+                  <div className="queue-num">#{v.ticketNumber}</div>
+                )}
                 <div className="queue-info">
                   <div className="car">
                     {[v.color, v.make, v.model].filter(Boolean).join(" ") || "Vehicle"}
@@ -2470,6 +2483,20 @@ function CarWashView({ user }) {
       )}
 
       {subTab === "report" && isManagerOrAdmin && <CarWashReportView />}
+
+      {zoomedPhoto && (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 24 }}
+          onClick={() => setZoomedPhoto(null)}
+        >
+          <img
+            src={zoomedPhoto}
+            alt="Vehicle"
+            style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 12 }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </>
   );
 }
