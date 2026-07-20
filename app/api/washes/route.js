@@ -55,6 +55,7 @@ async function GET(req) {
     color: v.color,
     ticketNumber: v.ticketNumber,
     section: v.section,
+    photoUrl: v.photoUrl || null,
     owner: v.owner,
     building: v.building,
     completed: v.washLogs.length > 0 ? v.washLogs[0] : null,
