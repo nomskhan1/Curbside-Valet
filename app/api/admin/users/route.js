@@ -19,6 +19,7 @@ async function GET(req) {
       username: true,
       name: true,
       role: true,
+      unitNumber: true,
       createdAt: true,
       building: { select: { id: true, name: true } },
     },
@@ -37,7 +38,7 @@ async function POST(req) {
   }
 
   const body = await req.json();
-  const { username, password, name } = body || {};
+  const { username, password, name, unitNumber } = body || {};
   let { role, buildingId } = body || {};
 
   // A manager can only create guest or staff accounts, and only for their
@@ -81,7 +82,7 @@ async function POST(req) {
 
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await prisma.user.create({
-    data: { username, passwordHash, name, role, buildingId: buildingId || null },
+    data: { username, passwordHash, name, role, buildingId: buildingId || null, unitNumber: unitNumber || null },
   });
 
   return new Response(

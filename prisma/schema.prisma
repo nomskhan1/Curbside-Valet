@@ -43,6 +43,10 @@ model User {
   buildingId String?
   building   Building? @relation(fields: [buildingId], references: [id])
 
+  // Unit number for Monthly Parker accounts — the apartment/condo unit
+  // they park for. Optional and freeform.
+  unitNumber String?
+
   vehicles        Vehicle[]
   requests        Request[] @relation("RequestedBy")
   handledRequests Request[] @relation("HandledBy")
