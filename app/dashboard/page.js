@@ -2934,6 +2934,39 @@ function UserAdmin({ currentUser }) {
   const [editUserVehicleError, setEditUserVehicleError] = useState("");
   const [showAddVehicleForUser, setShowAddVehicleForUser] = useState(false);
   const [addVehicleForUserError, setAddVehicleForUserError] = useState("");
+  const [showImport, setShowImport] = useState(false);
+  const [importResults, setImportResults] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+  const csvInputRef = useRef(null);
+
+  async function handleCSVImport(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setImportError("");
+    setImportResults(null);
+    try {
+      const text = await file.text();
+      const res = await fetch("/api/admin/import-parkers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csvText: text }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setImportError(data.error || "Import failed.");
+        return;
+      }
+      setImportResults(data);
+      load();
+    } catch {
+      setImportError("Failed to read CSV. Please try again.");
+    } finally {
+      setImporting(false);
+      e.target.value = "";
+    }
+  }
 
   function startEditUser(u) {
     setEditUserId(u.id);
@@ -3103,6 +3136,7 @@ function UserAdmin({ currentUser }) {
       password: form.password.value,
       role: form.role.value,
       buildingId: form.buildingId ? form.buildingId.value : null,
+      unitNumber: form.unitNumber ? form.unitNumber.value || null : null,
     };
     const res = await fetch("/api/admin/users", {
       method: "POST",
@@ -3286,6 +3320,13 @@ function UserAdmin({ currentUser }) {
 
           {role === "GUEST" && (
             <div className="field">
+              <label>Unit # (optional)</label>
+              <input name="unitNumber" placeholder="e.g. 101" />
+            </div>
+          )}
+
+          {role === "GUEST" && (
+            <div className="field">
               <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
                 <input
                   type="checkbox"
@@ -3416,6 +3457,71 @@ function UserAdmin({ currentUser }) {
         </button>
       )}
 
+      {/* CSV bulk import */}
+      <div style={{ marginTop: 10 }}>
+        <input
+          ref={csvInputRef}
+          type="file"
+          accept=".csv"
+          onChange={handleCSVImport}
+          style={{ display: "none" }}
+        />
+        <button
+          className="btn btn-ghost"
+          disabled={importing}
+          onClick={() => csvInputRef.current?.click()}
+          style={{ width: "auto", padding: "10px 16px", fontSize: 13 }}
+        >
+          {importing ? "Importing…" : "📥 Import Monthly Parkers (CSV)"}
+        </button>
+        <a
+          href="/api/admin/import-parkers/template"
+          style={{ fontSize: 12, color: "var(--slate2)", marginLeft: 12 }}
+          download
+        >
+          Download template
+        </a>
+      </div>
+
+      {importError && <div className="error-box" style={{ marginTop: 10 }}>{importError}</div>}
+
+      {importResults && (
+        <div className="stub" style={{ marginTop: 12 }}>
+          <div style={{ fontWeight: 600, marginBottom: 8, color: "var(--green)" }}>
+            ✓ {importResults.created} account{importResults.created !== 1 ? "s" : ""} created
+          </div>
+          {importResults.errors.length > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontWeight: 600, color: "var(--red)", marginBottom: 4 }}>
+                {importResults.errors.length} error{importResults.errors.length !== 1 ? "s" : ""}:
+              </div>
+              {importResults.errors.map((e, i) => (
+                <div key={i} style={{ fontSize: 12, color: "var(--red)" }}>Row {e.row}: {e.error}</div>
+              ))}
+            </div>
+          )}
+          <div style={{ fontSize: 12, color: "var(--slate2)", marginBottom: 6, fontWeight: 600 }}>
+            Created accounts (save these passwords):
+          </div>
+          {importResults.results.map((r, i) => (
+            <div key={i} style={{ fontSize: 12, marginBottom: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontWeight: 600 }}>{r.name}</span>
+              <span>@{r.username}</span>
+              <span style={{ color: "var(--slate2)" }}>pw: {r.password}</span>
+              {r.unit && <span style={{ color: "var(--slate2)" }}>unit: {r.unit}</span>}
+              {r.decal && <span style={{ color: "var(--slate2)" }}>decal: {r.decal}</span>}
+            </div>
+          ))}
+          <button
+            className="btn btn-ghost"
+            style={{ marginTop: 8, width: "auto", padding: "8px 14px", fontSize: 12 }}
+            onClick={() => setImportResults(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {users
         .filter((u) => roleFilter === "ALL" || u.role === roleFilter)
         .filter(
@@ -3432,6 +3538,7 @@ function UserAdmin({ currentUser }) {
               <div style={{ fontSize: 12, color: "var(--slate2)" }}>
                 {u.username}
                 {u.building ? ` · ${u.building.name}` : ""}
+                {u.unitNumber ? ` · Unit ${u.unitNumber}` : ""}
               </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -3476,8 +3583,7 @@ function UserAdmin({ currentUser }) {
                   Reset password
                 </button>
               )}
-              {!isManager && (
-                <button
+              <button
                   onClick={() => {
                     if (
                       window.confirm(
@@ -3500,7 +3606,6 @@ function UserAdmin({ currentUser }) {
                 >
                   Remove
                 </button>
-              )}
             </div>
           </div>
 
