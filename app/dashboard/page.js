@@ -1010,14 +1010,26 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
     (r) => r.status === "WAITING" && (!r.scheduledFor || new Date(r.scheduledFor) <= new Date())
   ).length;
 
-  // Browsers block sound until a person interacts with the page once.
-  function enableAlerts() {
-    // Play a silent sound to unlock audio context on this device.
-    const audio = new Audio("/alert.mp3");
-    audio.volume = 0;
-    audio.play().then(() => audio.pause()).catch(() => {});
-    setAlertsEnabled(true);
-  }
+  // Auto-enable sound on first user interaction with the page — browsers
+  // require a user gesture before audio can play. We listen for any click
+  // or tap once, unlock the audio context, then remove the listener.
+  useEffect(() => {
+    if (alertsEnabled) return;
+    function unlock() {
+      const audio = new Audio("/alert.mp3");
+      audio.volume = 0;
+      audio.play().then(() => audio.pause()).catch(() => {});
+      setAlertsEnabled(true);
+      document.removeEventListener("click", unlock);
+      document.removeEventListener("touchstart", unlock);
+    }
+    document.addEventListener("click", unlock, { once: true });
+    document.addEventListener("touchstart", unlock, { once: true });
+    return () => {
+      document.removeEventListener("click", unlock);
+      document.removeEventListener("touchstart", unlock);
+    };
+  }, [alertsEnabled]);
 
   // Play the alert every 3 seconds while any request is WAITING.
   useEffect(() => {
@@ -1051,16 +1063,6 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
 
   return (
     <>
-      {!alertsEnabled && (
-        <button
-          className="btn btn-ghost"
-          style={{ marginBottom: 16, borderColor: "var(--brass)", color: "var(--brass-light)" }}
-          onClick={enableAlerts}
-        >
-          🔔 Enable sound alerts
-        </button>
-      )}
-
       {user.role === "ADMIN" && (
         <div className="tabs">
           <button className={tab === "queue" ? "active" : ""} onClick={() => setTab("queue")}>
@@ -1226,7 +1228,7 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
                           · scheduled {new Date(r.scheduledFor).toLocaleString()}
                         </span>
                       )}
-                      {r.status === "WAITING" && !isFuture && alertsEnabled && (
+                      {r.status === "WAITING" && !isFuture && (
                         <span style={{ color: "var(--brass-light)", marginLeft: 6 }}>● ringing</span>
                       )}
                     </div>
