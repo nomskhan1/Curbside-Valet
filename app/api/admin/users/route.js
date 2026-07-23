@@ -83,7 +83,8 @@ async function POST(req) {
   });
 
   if (existing) {
-    const sameBuilding = existing.buildingId === buildingId;
+    // Only treat as same-building conflict if BOTH have the same non-null buildingId
+    const sameBuilding = buildingId && existing.buildingId && existing.buildingId === buildingId;
     if (sameBuilding) {
       // Same building — show the conflict clearly regardless of role
       const buildingInfo = existing.building?.name ? ` (in ${existing.building.name})` : "";
