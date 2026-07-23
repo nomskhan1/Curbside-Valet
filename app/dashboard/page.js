@@ -2948,6 +2948,7 @@ function UserAdmin({ currentUser }) {
   const [resetError, setResetError] = useState("");
   const [resetSuccess, setResetSuccess] = useState(null);
   const [roleFilter, setRoleFilter] = useState("ALL");
+  const [buildingFilter, setBuildingFilter] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [editUserId, setEditUserId] = useState(null);
   const [editName, setEditName] = useState("");
@@ -3301,6 +3302,17 @@ function UserAdmin({ currentUser }) {
             {!isManager && <option value="ADMIN">Admin</option>}
           </select>
         </div>
+        {!isManager && buildings.length > 1 && (
+          <div className="field" style={{ flex: 1, minWidth: 160 }}>
+            <label>Filter by garage</label>
+            <select value={buildingFilter} onChange={(e) => setBuildingFilter(e.target.value)}>
+              <option value="ALL">All garages</option>
+              {buildings.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {showForm ? (
@@ -3553,6 +3565,7 @@ function UserAdmin({ currentUser }) {
 
       {users
         .filter((u) => roleFilter === "ALL" || u.role === roleFilter)
+        .filter((u) => buildingFilter === "ALL" || u.building?.id === buildingFilter)
         .filter(
           (u) =>
             !searchQuery ||
