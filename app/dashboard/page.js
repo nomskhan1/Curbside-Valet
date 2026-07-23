@@ -3557,7 +3557,8 @@ function UserAdmin({ currentUser }) {
           (u) =>
             !searchQuery ||
             u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            u.username.toLowerCase().includes(searchQuery.toLowerCase())
+            u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (u.unitNumber || "").toLowerCase().includes(searchQuery.toLowerCase())
         )
         .map((u) => (
         <div key={u.id} style={{ marginBottom: resetPasswordUserId === u.id ? 4 : 0 }}>

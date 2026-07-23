@@ -23,7 +23,7 @@ async function GET(req) {
       createdAt: true,
       building: { select: { id: true, name: true } },
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: { name: "asc" },
   });
 
   return new Response(JSON.stringify(users), { status: 200 });
@@ -73,16 +73,38 @@ async function POST(req) {
     });
   }
 
-  const existing = await prisma.user.findUnique({ where: { username } });
+  // Check for username conflicts. If the conflict is in a different building,
+  // auto-generate a unique username rather than blocking the manager with
+  // an error about a user they can't even see.
+  let resolvedUsername = username;
+  const existing = await prisma.user.findUnique({
+    where: { username },
+    select: { id: true, name: true, buildingId: true, building: { select: { name: true } } }
+  });
+
   if (existing) {
-    return new Response(JSON.stringify({ error: "That username is already taken." }), {
-      status: 409,
-    });
+    const sameBuilding = existing.buildingId === buildingId;
+    if (sameBuilding || session.role === "ADMIN") {
+      // Same building or Admin — show the conflict clearly
+      const buildingInfo = existing.building?.name ? ` (in ${existing.building.name})` : "";
+      return new Response(JSON.stringify({
+        error: `Username "${username}" is already taken by ${existing.name}${buildingInfo}. Please choose a different username.`
+      }), { status: 409 });
+    } else {
+      // Different building — silently resolve by appending a number
+      let counter = 2;
+      while (true) {
+        const candidate = `${username}${counter}`;
+        const taken = await prisma.user.findUnique({ where: { username: candidate }, select: { id: true } });
+        if (!taken) { resolvedUsername = candidate; break; }
+        counter++;
+      }
+    }
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await prisma.user.create({
-    data: { username, passwordHash, name, role, buildingId: buildingId || null, unitNumber: unitNumber || null },
+    data: { username: resolvedUsername, passwordHash, name, role, buildingId: buildingId || null, unitNumber: unitNumber || null },
   });
 
   return new Response(
