@@ -84,8 +84,8 @@ async function POST(req) {
 
   if (existing) {
     const sameBuilding = existing.buildingId === buildingId;
-    if (sameBuilding || session.role === "ADMIN") {
-      // Same building or Admin — show the conflict clearly
+    if (sameBuilding) {
+      // Same building — show the conflict clearly regardless of role
       const buildingInfo = existing.building?.name ? ` (in ${existing.building.name})` : "";
       return new Response(JSON.stringify({
         error: `Username "${username}" is already taken by ${existing.name}${buildingInfo}. Please choose a different username.`
