@@ -1,18 +1,18 @@
 :root{
-  --bg:#FFFFFF;
-  --bg-2:#F3F1EA;
-  --ink:#1B2430;
+  --bg:#F0EDE6;
+  --bg-2:#E8E4DC;
+  --ink:#2C3240;
   --brass:#C9A227;
   --brass-light:#8A6A1B;
   --slate2:#6B7280;
   --green:#4A7856;
   --red:#B0413E;
-  --line:rgba(27,36,48,0.12);
+  --line:rgba(44,50,64,0.15);
 }
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;}
 body{
-  background:var(--bg);
+  background:var(--bg-2);
   color:var(--ink);
   font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   min-height:100vh;
@@ -25,14 +25,11 @@ body{
 }
 a{color:var(--brass-light);}
 
-.shell{ max-width:480px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; }
+.shell{ max-width:480px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; background:var(--bg); }
 @media (min-width: 700px){ .shell{ max-width:680px; } }
 @media (min-width: 1000px){ .shell{ max-width:880px; } main{ padding-left:40px; padding-right:40px; } }
 @media (min-width: 1300px){ .shell{ max-width:1080px; } }
 
-/* Inside the installed Android/iOS app, fill the real device width instead
-   of staying capped at the desktop-browser-friendly 480px. Also respect
-   safe areas (notches, status bars) so content isn't obscured by them. */
 body.native-app .shell{
   max-width:100%;
   padding-left:env(safe-area-inset-left);
@@ -47,6 +44,7 @@ body.native-app footer.note{
 header.topbar{
   display:flex; align-items:center; justify-content:space-between;
   padding:18px 20px 14px; border-bottom:1px solid var(--line);
+  background:var(--bg);
 }
 .brand{ display:flex; align-items:center; gap:8px; }
 .brand img.logo{ width:36px; height:36px; border-radius:8px; flex-shrink:0; }
@@ -72,7 +70,7 @@ h1.title{ font-family:"Oswald",sans-serif; font-size:28px; line-height:1.1; marg
 }
 .btn:active{ transform:scale(0.98); }
 .btn:disabled{ opacity:0.4; cursor:not-allowed; }
-.btn-primary{ background:var(--brass); color:var(--ink); font-weight:600; }
+.btn-primary{ background:var(--brass); color:#fff; font-weight:600; }
 .btn-ghost{ background:transparent; border:1px solid var(--line); color:var(--ink); margin-top:10px; }
 
 .error-box{
@@ -104,17 +102,17 @@ h1.title{ font-family:"Oswald",sans-serif; font-size:28px; line-height:1.1; marg
 .queue-item{ background:var(--bg-2); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:10px; display:flex; align-items:center; gap:14px; }
 .queue-num{ font-family:"Oswald",sans-serif; font-size:20px; font-weight:600; color:var(--brass-light); width:44px; text-align:center; flex-shrink:0; }
 .queue-info{ flex:1; min-width:0; }
-.queue-info .car{ font-size:15px; margin-bottom:2px; }
+.queue-info .car{ font-size:15px; margin-bottom:2px; color:var(--ink); }
 .queue-info .meta{ font-size:12px; color:var(--slate2); }
 .queue-actions{ display:flex; flex-direction:column; gap:6px; flex-shrink:0; }
 .mini-btn{ border:none; border-radius:6px; padding:8px 12px; font-family:"Oswald",sans-serif; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; cursor:pointer; }
-.mini-btn.start{ background:var(--brass); color:var(--ink); font-weight:600; }
-.mini-btn.ready{ background:var(--green); color:#FFFFFF; font-weight:600; }
+.mini-btn.start{ background:var(--brass); color:#fff; font-weight:600; }
+.mini-btn.ready{ background:var(--green); color:#fff; font-weight:600; }
 .mini-btn.done{ background:transparent; border:1px solid var(--line); color:var(--slate2); }
 
 .tabs{ display:flex; border:1px solid var(--line); border-radius:20px; overflow-x:auto; margin-bottom:18px; -webkit-overflow-scrolling:touch; }
 .tabs button{ flex:1 0 auto; min-width:72px; background:transparent; border:none; color:var(--slate2); padding:9px 10px; font-family:"Oswald",sans-serif; font-size:12px; letter-spacing:0.06em; text-transform:uppercase; cursor:pointer; white-space:nowrap; }
-.tabs button.active{ background:var(--brass); color:var(--ink); font-weight:600; border-radius:20px; }
+.tabs button.active{ background:var(--brass); color:#fff; font-weight:600; border-radius:20px; }
 
 .list-row{ display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--line); font-size:14px; }
 .list-row .role-tag{ font-size:10px; padding:3px 8px; border-radius:10px; border:1px solid var(--line); color:var(--slate2); text-transform:uppercase; letter-spacing:0.06em; }
