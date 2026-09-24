@@ -10,10 +10,20 @@ async function DELETE(req, { params }) {
   const { id } = params;
 
   try {
-    await prisma.request.deleteMany({ where: { vehicle: { user: { buildingId: id } } } });
-    await prisma.vehicle.deleteMany({ where: { user: { buildingId: id } } });
+    // Get all vehicles in this building
+    const vehicles = await prisma.vehicle.findMany({
+      where: { buildingId: id },
+      select: { id: true },
+    });
+    const vehicleIds = vehicles.map(v => v.id);
+
+    // Delete in correct order to avoid foreign key violations
+    await prisma.request.deleteMany({ where: { vehicleId: { in: vehicleIds } } });
+    await prisma.washLog.deleteMany({ where: { vehicleId: { in: vehicleIds } } });
+    await prisma.vehicle.deleteMany({ where: { buildingId: id } });
     await prisma.user.deleteMany({ where: { buildingId: id } });
     await prisma.building.delete({ where: { id } });
+
     return new Response(JSON.stringify({ ok: true }), { status: 200 });
   } catch (err) {
     console.error("Delete building error:", err);
