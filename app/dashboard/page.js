@@ -397,6 +397,24 @@ function SuperAdminView() {
     load();
   }
 
+  async function deleteBuilding(id, name) {
+    if (!window.confirm(`Remove garage "${name}"? This cannot be undone.`)) return;
+    setError("");
+    const res = await fetch(`/api/superadmin/buildings/${id}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) { setError(data.error || "Failed to delete garage."); return; }
+    load();
+  }
+
+  async function deleteAdmin(id, name) {
+    if (!window.confirm(`Remove admin "${name}"? This cannot be undone.`)) return;
+    setError("");
+    const res = await fetch(`/api/superadmin/admins/${id}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) { setError(data.error || "Failed to delete admin."); return; }
+    load();
+  }
+
   return (
     <>
       <div className="queue-header">
@@ -473,11 +491,22 @@ function SuperAdminView() {
               {b.logoUrl && (
                 <img src={b.logoUrl} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover" }} />
               )}
-              {b.name}
+              <div>
+                <div style={{ fontWeight: 600 }}>{b.name}</div>
+                {b.address && <div style={{ fontSize: 11, color: "var(--slate2)" }}>{b.address}</div>}
+              </div>
             </span>
-            <span className="role-tag">
-              {b.users.length > 0 ? `Admin: ${b.users[0].name}` : "No admin assigned"}
-            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span className="role-tag">
+                {b.users.length > 0 ? `Admin: ${b.users[0].name}` : "No admin assigned"}
+              </span>
+              <button
+                onClick={() => deleteBuilding(b.id, b.name)}
+                style={{ background: "none", border: "none", color: "var(--red)", fontSize: 11, cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.04em" }}
+              >
+                Remove
+              </button>
+            </div>
           </div>
         ))
       )}
@@ -534,10 +563,19 @@ function SuperAdminView() {
       {loading ? null : (
         admins.map((a) => (
           <div key={a.id} className="list-row">
-            <span>
-              {a.name} ({a.username})
-            </span>
-            <span className="role-tag">{a.building?.name || "No garage"}</span>
+            <div>
+              <div style={{ fontWeight: 600 }}>{a.name}</div>
+              <div style={{ fontSize: 12, color: "var(--slate2)" }}>{a.username} · {a.building?.name || "No garage"}</div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span className="role-tag">Admin</span>
+              <button
+                onClick={() => deleteAdmin(a.id, a.name)}
+                style={{ background: "none", border: "none", color: "var(--red)", fontSize: 11, cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.04em" }}
+              >
+                Remove
+              </button>
+            </div>
           </div>
         ))
       )}
