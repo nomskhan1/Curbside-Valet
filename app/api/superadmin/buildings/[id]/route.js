@@ -1,25 +1,24 @@
-import { NextResponse } from "next/server";
-import { getSessionFromCookies } from "@/lib/auth";
-import prisma from "@/lib/prisma";
+const prisma = require("../../../../../lib/db");
+const { getSessionFromRequest } = require("../../../../../lib/auth");
 
-export async function DELETE(req, { params }) {
-  const session = await getSessionFromCookies();
+async function DELETE(req, { params }) {
+  const session = getSessionFromRequest(req);
   if (!session || session.role !== "SUPER_ADMIN") {
-    return NextResponse.json({ error: "Not authorized." }, { status: 403 });
+    return new Response(JSON.stringify({ error: "Not authorized." }), { status: 403 });
   }
 
   const { id } = params;
 
   try {
-    // Delete all related data first
     await prisma.request.deleteMany({ where: { vehicle: { user: { buildingId: id } } } });
     await prisma.vehicle.deleteMany({ where: { user: { buildingId: id } } });
     await prisma.user.deleteMany({ where: { buildingId: id } });
     await prisma.building.delete({ where: { id } });
-
-    return NextResponse.json({ ok: true });
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
   } catch (err) {
     console.error("Delete building error:", err);
-    return NextResponse.json({ error: "Failed to delete garage. " + err.message }, { status: 500 });
+    return new Response(JSON.stringify({ error: "Failed to delete garage. " + err.message }), { status: 500 });
   }
 }
+
+module.exports = { DELETE };
