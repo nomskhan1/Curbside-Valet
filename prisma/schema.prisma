@@ -26,6 +26,10 @@ model Building {
   // Uploaded by Super Admin when creating/branding a garage.
   logoUrl String?
 
+  // Feature toggles — controlled by Super Admin or Admin
+  hasCarWash    Boolean @default(true)
+  hasEvCharging Boolean @default(true)
+
   users    User[]
   vehicles Vehicle[]
 }

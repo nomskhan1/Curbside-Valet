@@ -379,6 +379,10 @@ function SuperAdminView() {
 
   const [showAddAdmin, setShowAddAdmin] = useState(false);
 
+  // Feature toggles for new building form
+  const [newHasCarWash, setNewHasCarWash] = useState(true);
+  const [newHasEvCharging, setNewHasEvCharging] = useState(true);
+
   const load = useCallback(async () => {
     setLoading(true);
     const [bRes, aRes] = await Promise.all([
@@ -433,6 +437,8 @@ function SuperAdminView() {
         name: form.name.value,
         address: form.address.value,
         logoUrl,
+        hasCarWash: newHasCarWash,
+        hasEvCharging: newHasEvCharging,
       }),
     });
     const data = await res.json();
@@ -444,6 +450,8 @@ function SuperAdminView() {
     setLogoPreview(null);
     setLogoUrl(null);
     setShowAddBuilding(false);
+    setNewHasCarWash(true);
+    setNewHasEvCharging(true);
     load();
   }
 
@@ -469,6 +477,15 @@ function SuperAdminView() {
     form.reset();
     setShowAddAdmin(false);
     load();
+  }
+
+  async function updateBuildingFeatures(id, field, value) {
+    const res = await fetch(`/api/superadmin/buildings/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [field]: value }),
+    });
+    if (res.ok) load();
   }
 
   async function deleteBuilding(id, name) {
@@ -541,6 +558,37 @@ function SuperAdminView() {
               />
             )}
           </div>
+          {/* Feature toggles */}
+          <div style={{ background: "var(--navy-2)", borderRadius: 10, padding: "16px 18px", marginBottom: 16 }}>
+            <div style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--slate2)", marginBottom: 14 }}>
+              Features
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>🚗 Car Wash</div>
+                <div style={{ fontSize: 12, color: "var(--slate2)" }}>Enable car wash scheduling for this garage</div>
+              </div>
+              <label style={{ position: "relative", display: "inline-block", width: 44, height: 24, flexShrink: 0 }}>
+                <input type="checkbox" checked={newHasCarWash} onChange={e => setNewHasCarWash(e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
+                <span style={{ position: "absolute", cursor: "pointer", inset: 0, background: newHasCarWash ? "var(--gold)" : "var(--line)", borderRadius: 24, transition: "0.2s" }}>
+                  <span style={{ position: "absolute", content: "", height: 18, width: 18, left: newHasCarWash ? 23 : 3, bottom: 3, background: "white", borderRadius: "50%", transition: "0.2s" }} />
+                </span>
+              </label>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>🔌 EV Charging</div>
+                <div style={{ fontSize: 12, color: "var(--slate2)" }}>Enable EV charging requests for this garage</div>
+              </div>
+              <label style={{ position: "relative", display: "inline-block", width: 44, height: 24, flexShrink: 0 }}>
+                <input type="checkbox" checked={newHasEvCharging} onChange={e => setNewHasEvCharging(e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
+                <span style={{ position: "absolute", cursor: "pointer", inset: 0, background: newHasEvCharging ? "var(--gold)" : "var(--line)", borderRadius: 24, transition: "0.2s" }}>
+                  <span style={{ position: "absolute", content: "", height: 18, width: 18, left: newHasEvCharging ? 23 : 3, bottom: 3, background: "white", borderRadius: "50%", transition: "0.2s" }} />
+                </span>
+              </label>
+            </div>
+          </div>
+
           <button className="btn btn-primary" type="submit" disabled={logoUploading}>
             Create garage
           </button>
@@ -570,10 +618,30 @@ function SuperAdminView() {
                 {b.address && <div style={{ fontSize: 11, color: "var(--slate2)" }}>{b.address}</div>}
               </div>
             </span>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", justifyContent: "flex-end" }}>
               <span className="role-tag">
                 {b.users.length > 0 ? `Admin: ${b.users[0].name}` : "No admin assigned"}
               </span>
+              {/* Car Wash toggle */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 11, color: "var(--slate2)" }}>🚗 Car Wash</span>
+                <label style={{ position: "relative", display: "inline-block", width: 36, height: 20, flexShrink: 0 }}>
+                  <input type="checkbox" checked={b.hasCarWash ?? true} onChange={e => updateBuildingFeatures(b.id, "hasCarWash", e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
+                  <span style={{ position: "absolute", cursor: "pointer", inset: 0, background: (b.hasCarWash ?? true) ? "var(--gold)" : "var(--line)", borderRadius: 20, transition: "0.2s" }}>
+                    <span style={{ position: "absolute", height: 14, width: 14, left: (b.hasCarWash ?? true) ? 19 : 3, bottom: 3, background: "white", borderRadius: "50%", transition: "0.2s" }} />
+                  </span>
+                </label>
+              </div>
+              {/* EV Charging toggle */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 11, color: "var(--slate2)" }}>🔌 EV</span>
+                <label style={{ position: "relative", display: "inline-block", width: 36, height: 20, flexShrink: 0 }}>
+                  <input type="checkbox" checked={b.hasEvCharging ?? true} onChange={e => updateBuildingFeatures(b.id, "hasEvCharging", e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
+                  <span style={{ position: "absolute", cursor: "pointer", inset: 0, background: (b.hasEvCharging ?? true) ? "var(--gold)" : "var(--line)", borderRadius: 20, transition: "0.2s" }}>
+                    <span style={{ position: "absolute", height: 14, width: 14, left: (b.hasEvCharging ?? true) ? 19 : 3, bottom: 3, background: "white", borderRadius: "50%", transition: "0.2s" }} />
+                  </span>
+                </label>
+              </div>
               <button
                 onClick={() => deleteBuilding(b.id, b.name)}
                 style={{ background: "none", border: "none", color: "var(--red)", fontSize: 11, cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.04em" }}
@@ -1062,7 +1130,7 @@ function GuestView({ user }) {
       {error && <div className="error-box">{error}</div>}
       {pickupSection}
       {visitorRequestSection}
-      {chargeSection}
+      {(user.building?.hasEvCharging ?? true) && chargeSection}
 
       {zoomedPhoto && (
         <div
@@ -1183,9 +1251,11 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
           <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>
             History
           </button>
-          <button className={tab === "carwash" ? "active" : ""} onClick={() => setTab("carwash")}>
-            Car Wash
-          </button>
+          {(user.building?.hasCarWash ?? true) && (
+            <button className={tab === "carwash" ? "active" : ""} onClick={() => setTab("carwash")}>
+              Car Wash
+            </button>
+          )}
           <button className={tab === "buildings" ? "active" : ""} onClick={() => setTab("buildings")}>
             Buildings
           </button>
@@ -1209,9 +1279,11 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
           <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>
             History
           </button>
-          <button className={tab === "carwash" ? "active" : ""} onClick={() => setTab("carwash")}>
-            Car Wash
-          </button>
+          {(user.building?.hasCarWash ?? true) && (
+            <button className={tab === "carwash" ? "active" : ""} onClick={() => setTab("carwash")}>
+              Car Wash
+            </button>
+          )}
           <button className={tab === "vehicles" ? "active" : ""} onClick={() => setTab("vehicles")}>
             Vehicles
           </button>
@@ -1226,9 +1298,11 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
           <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>
             History
           </button>
-          <button className={tab === "carwash" ? "active" : ""} onClick={() => setTab("carwash")}>
-            Car Wash
-          </button>
+          {(user.building?.hasCarWash ?? true) && (
+            <button className={tab === "carwash" ? "active" : ""} onClick={() => setTab("carwash")}>
+              Car Wash
+            </button>
+          )}
           <button className={tab === "vehicles" ? "active" : ""} onClick={() => setTab("vehicles")}>
             Vehicles
           </button>
