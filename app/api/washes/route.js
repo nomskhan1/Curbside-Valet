@@ -31,9 +31,13 @@ async function GET(req) {
 
   const weekday = dayOfWeekFor(dateStr);
 
+  const buildingId = url.searchParams.get("buildingId");
+
   const where = { washDay: weekday };
   if (session.role === "STAFF" || session.role === "MANAGER") {
     where.buildingId = session.buildingId || "__none__";
+  } else if (session.role === "ADMIN" && buildingId) {
+    where.buildingId = buildingId;
   }
 
   const vehicles = await prisma.vehicle.findMany({

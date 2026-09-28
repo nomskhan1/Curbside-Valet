@@ -13,14 +13,16 @@ async function GET(req) {
   const url = new URL(req.url);
   const fromParam = url.searchParams.get("from");
   const toParam = url.searchParams.get("to");
+  const buildingId = url.searchParams.get("buildingId");
 
   const where = { status: { in: ["COMPLETED", "CANCELLED"] } };
 
-  // Staff and managers only see history for their own building — same
-  // scoping the live queue uses. No buildingId means they see nothing,
-  // not everything.
+  // Staff and managers only see history for their own building.
+  // Admin sees all buildings unless a buildingId filter is provided.
   if (session.role === "STAFF" || session.role === "MANAGER") {
     where.vehicle = { buildingId: session.buildingId || "__none__" };
+  } else if (session.role === "ADMIN" && buildingId) {
+    where.vehicle = { buildingId };
   }
 
   if (fromParam || toParam) {
