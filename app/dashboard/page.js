@@ -378,8 +378,6 @@ function SuperAdminView() {
   const logoInputRef = useRef(null);
 
   const [showAddAdmin, setShowAddAdmin] = useState(false);
-  const [editAdminId, setEditAdminId] = useState(null);
-  const [editAdminBuildings, setEditAdminBuildings] = useState([]);
 
   // Feature toggles for new building form
   const [newHasCarWash, setNewHasCarWash] = useState(true);
@@ -497,26 +495,6 @@ function SuperAdminView() {
     const data = await res.json();
     if (!res.ok) { setError(data.error || "Failed to delete garage."); return; }
     load();
-  }
-
-  async function updateAdminBuildings(adminId) {
-    setError("");
-    const res = await fetch(`/api/superadmin/admins/${adminId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ buildingIds: editAdminBuildings }),
-    });
-    const data = await res.json();
-    if (!res.ok) { setError(data.error || "Failed to update."); return; }
-    setEditAdminId(null);
-    setEditAdminBuildings([]);
-    load();
-  }
-
-  function toggleEditBuilding(buildingId) {
-    setEditAdminBuildings(prev =>
-      prev.includes(buildingId) ? prev.filter(id => id !== buildingId) : [...prev, buildingId]
-    );
   }
 
   async function deleteAdmin(id, name) {
@@ -726,73 +704,20 @@ function SuperAdminView() {
 
       {loading ? null : (
         admins.map((a) => (
-          <div key={a.id} style={{ borderBottom: "1px solid var(--line)" }}>
-            <div className="list-row" style={{ borderBottom: "none" }}>
-              <div>
-                <div style={{ fontWeight: 600 }}>{a.name}</div>
-                <div style={{ fontSize: 12, color: "var(--slate2)" }}>
-                  {a.username} · {a.buildings?.length > 0 ? a.buildings.map(b => b.name).join(", ") : a.building?.name || "No garage assigned"}
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <span className="role-tag">Admin</span>
-                <button
-                  onClick={() => {
-                    if (editAdminId === a.id) {
-                      setEditAdminId(null);
-                      setEditAdminBuildings([]);
-                    } else {
-                      setEditAdminId(a.id);
-                      // Pre-select current buildings
-                      const current = a.buildings?.map(b => b.id) || (a.building ? [a.building.id] : []);
-                      setEditAdminBuildings(current);
-                    }
-                  }}
-                  style={{ background: "none", border: "none", color: "var(--gold)", fontSize: 11, cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.04em" }}
-                >
-                  {editAdminId === a.id ? "Cancel" : "Edit"}
-                </button>
-                <button
-                  onClick={() => deleteAdmin(a.id, a.name)}
-                  style={{ background: "none", border: "none", color: "var(--red)", fontSize: 11, cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.04em" }}
-                >
-                  Remove
-                </button>
-              </div>
+          <div key={a.id} className="list-row">
+            <div>
+              <div style={{ fontWeight: 600 }}>{a.name}</div>
+              <div style={{ fontSize: 12, color: "var(--slate2)" }}>{a.username} · {a.building?.name || "No garage"}</div>
             </div>
-            {editAdminId === a.id && (
-              <div style={{ padding: "12px 0 16px" }}>
-                <div style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--slate2)", marginBottom: 12 }}>
-                  Assign garages to {a.name}
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-                  {buildings.map(b => (
-                    <label key={b.id} style={{
-                      display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13,
-                      background: editAdminBuildings.includes(b.id) ? "rgba(201,162,39,0.15)" : "var(--navy-2)",
-                      border: `1px solid ${editAdminBuildings.includes(b.id) ? "var(--gold)" : "var(--line)"}`,
-                      borderRadius: 8, padding: "8px 12px",
-                      color: editAdminBuildings.includes(b.id) ? "var(--gold)" : "var(--cream)",
-                    }}>
-                      <input
-                        type="checkbox"
-                        checked={editAdminBuildings.includes(b.id)}
-                        onChange={() => toggleEditBuilding(b.id)}
-                        style={{ width: "auto" }}
-                      />
-                      {b.name}
-                    </label>
-                  ))}
-                </div>
-                <button
-                  className="btn btn-primary"
-                  style={{ width: "auto", padding: "10px 20px" }}
-                  onClick={() => updateAdminBuildings(a.id)}
-                >
-                  Save assignments
-                </button>
-              </div>
-            )}
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span className="role-tag">Admin</span>
+              <button
+                onClick={() => deleteAdmin(a.id, a.name)}
+                style={{ background: "none", border: "none", color: "var(--red)", fontSize: 11, cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.04em" }}
+              >
+                Remove
+              </button>
+            </div>
           </div>
         ))
       )}
@@ -1518,7 +1443,7 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
         </>
       )}
 
-      {tab === "history" && (user.role === "ADMIN" || user.role === "STAFF" || user.role === "MANAGER") && <HistoryView />}
+      {tab === "history" && (user.role === "ADMIN" || user.role === "STAFF" || user.role === "MANAGER") && <HistoryView user={user} />}
 
       {tab === "carwash" && <CarWashView user={user} />}
 
@@ -2457,11 +2382,20 @@ function todayLocalDateString() {
 
 function CarWashView({ user }) {
   const isManagerOrAdmin = user.role === "ADMIN" || user.role === "MANAGER";
+  const isAdmin = user.role === "ADMIN";
   const [subTab, setSubTab] = useState("today"); // "today" | "report"
   const [date, setDate] = useState(todayLocalDateString());
   const [washes, setWashes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [buildings, setBuildings] = useState([]);
+  const [buildingFilter, setBuildingFilter] = useState("ALL");
+
+  useEffect(() => {
+    if (isAdmin) {
+      fetch("/api/buildings").then(r => r.json()).then(d => { if (Array.isArray(d)) setBuildings(d); }).catch(() => {});
+    }
+  }, [isAdmin]);
   const [initialsDraft, setInitialsDraft] = useState({}); // vehicleId -> typed initials
   const [savingId, setSavingId] = useState(null);
   const [zoomedPhoto, setZoomedPhoto] = useState(null);
@@ -2527,11 +2461,13 @@ function CarWashView({ user }) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const res = await fetch(`/api/washes?date=${date}`);
+    const params = new URLSearchParams({ date });
+    if (isAdmin && buildingFilter !== "ALL") params.set("buildingId", buildingFilter);
+    const res = await fetch(`/api/washes?${params.toString()}`);
     const data = await res.json();
     setWashes(Array.isArray(data) ? data : []);
     setLoading(false);
-  }, [date]);
+  }, [date, buildingFilter, isAdmin]);
 
   useEffect(() => {
     if (subTab === "today") load();
@@ -2580,9 +2516,20 @@ function CarWashView({ user }) {
 
       {subTab === "today" && (
         <>
-          <div className="field" style={{ maxWidth: 220 }}>
-            <label>Date</label>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
+            {isAdmin && buildings.length > 0 && (
+              <div className="field" style={{ flex: 1, minWidth: 160, marginBottom: 0 }}>
+                <label>Building</label>
+                <select value={buildingFilter} onChange={(e) => setBuildingFilter(e.target.value)}>
+                  <option value="ALL">All buildings</option>
+                  {buildings.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </div>
+            )}
+            <div className="field" style={{ flex: 1, minWidth: 160, marginBottom: 0 }}>
+              <label>Date</label>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
           </div>
 
           {!showManual ? (
@@ -3003,22 +2950,32 @@ function BrandingView({ onLogoUpdated }) {
   );
 }
 
-function HistoryView() {
+function HistoryView({ user }) {
+  const isAdmin = user?.role === "ADMIN";
   const [history, setHistory] = useState([]);
+  const [buildings, setBuildings] = useState([]);
+  const [buildingFilter, setBuildingFilter] = useState("ALL");
   const [loading, setLoading] = useState(true);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+
+  useEffect(() => {
+    if (isAdmin) {
+      fetch("/api/buildings").then(r => r.json()).then(d => { if (Array.isArray(d)) setBuildings(d); }).catch(() => {});
+    }
+  }, [isAdmin]);
 
   const load = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams();
     if (fromDate) params.set("from", fromDate);
     if (toDate) params.set("to", toDate);
+    if (isAdmin && buildingFilter !== "ALL") params.set("buildingId", buildingFilter);
     const qs = params.toString();
     const res = await fetch(`/api/requests/history${qs ? `?${qs}` : ""}`);
     if (res.ok) setHistory(await res.json());
     setLoading(false);
-  }, [fromDate, toDate]);
+  }, [fromDate, toDate, buildingFilter, isAdmin]);
 
   useEffect(() => {
     load();
@@ -3085,6 +3042,15 @@ function HistoryView() {
       </div>
 
       <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
+        {isAdmin && buildings.length > 0 && (
+          <div className="field" style={{ flex: 1, minWidth: 160, marginBottom: 0 }}>
+            <label>Building</label>
+            <select value={buildingFilter} onChange={(e) => setBuildingFilter(e.target.value)}>
+              <option value="ALL">All buildings</option>
+              {buildings.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </div>
+        )}
         <div className="field" style={{ flex: 1, minWidth: 140, marginBottom: 0 }}>
           <label>From</label>
           <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
