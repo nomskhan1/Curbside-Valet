@@ -116,6 +116,11 @@ export default function Dashboard() {
   if (user === undefined) return null;
   if (!user) return null;
 
+  // Force password change on first login
+  if (user.mustChangePassword) {
+    return <ForcePasswordChange user={user} onChanged={() => setUser({ ...user, mustChangePassword: false })} />;
+  }
+
   return (
     <div className="shell">
       <header className="topbar" style={{ position: "relative", flexWrap: "wrap", rowGap: 6 }}>
@@ -197,6 +202,75 @@ export default function Dashboard() {
 }
 
 // ---------------- CHANGE PASSWORD ----------------
+// Shown instead of the full dashboard when mustChangePassword is true
+function ForcePasswordChange({ user, onChanged }) {
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    if (newPassword.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (newPassword !== confirmPassword) { setError("Passwords don't match."); return; }
+    if (newPassword === "Bringmycar") { setError("Please choose a different password from the default one."); return; }
+    setSaving(true);
+    const res = await fetch("/api/auth/change-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ currentPassword: "Bringmycar", newPassword }),
+    });
+    const data = await res.json();
+    setSaving(false);
+    if (!res.ok) { setError(data.error || "Failed to update password."); return; }
+    onChanged();
+  }
+
+  return (
+    <div className="shell" style={{ justifyContent: "center", alignItems: "center", minHeight: "100vh", background: "var(--navy)" }}>
+      <div className="card" style={{ maxWidth: 400, margin: "60px auto", width: "100%" }}>
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <img src="/logo.png" alt="" style={{ height: 48, marginBottom: 12 }} />
+          <h1 className="title" style={{ fontSize: 22, marginBottom: 6 }}>Welcome, {user.name}!</h1>
+          <p style={{ fontSize: 14, color: "var(--slate2)", lineHeight: 1.6 }}>
+            For your security, please set a new password before continuing.
+          </p>
+        </div>
+        {error && <div className="error-box">{error}</div>}
+        <form onSubmit={handleSubmit}>
+          <div className="field">
+            <label>New password</label>
+            <input
+              type="password"
+              value={newPassword}
+              onChange={e => setNewPassword(e.target.value)}
+              placeholder="At least 6 characters"
+              required
+              minLength={6}
+              autoFocus
+            />
+          </div>
+          <div className="field">
+            <label>Confirm new password</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={e => setConfirmPassword(e.target.value)}
+              placeholder="Repeat your new password"
+              required
+              minLength={6}
+            />
+          </div>
+          <button className="btn btn-primary" type="submit" disabled={saving}>
+            {saving ? "Saving..." : "Set password & continue"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function ChangePasswordPanel({ onClose }) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -3198,13 +3272,15 @@ function UserAdmin({ currentUser }) {
     e.preventDefault();
     setError("");
     const form = e.target;
+    const isGuest = form.role.value === "GUEST";
     const body = {
       name: form.name.value,
       username: form.username.value,
-      password: form.password.value,
+      password: isGuest ? "Bringmycar" : form.password.value,
       role: form.role.value,
       buildingId: form.buildingId ? form.buildingId.value : null,
       unitNumber: form.unitNumber ? form.unitNumber.value || null : null,
+      mustChangePassword: isGuest ? true : false,
     };
     const res = await fetch("/api/admin/users", {
       method: "POST",
@@ -3364,10 +3440,6 @@ function UserAdmin({ currentUser }) {
             <input name="username" type="text" required />
           </div>
           <div className="field">
-            <label>Password</label>
-            <input name="password" type="password" required minLength={6} />
-          </div>
-          <div className="field">
             <label>Role</label>
             <select name="role" value={role} onChange={(e) => setRole(e.target.value)}>
               <option value="GUEST">Monthly parker</option>
@@ -3376,6 +3448,16 @@ function UserAdmin({ currentUser }) {
               {!isManager && <option value="ADMIN">Admin</option>}
             </select>
           </div>
+          {role === "GUEST" ? (
+            <div style={{ background: "rgba(201,162,39,0.1)", border: "1px solid var(--gold)", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "var(--gold)" }}>
+              🔑 Default password: <strong>Bringmycar</strong> — the resident will be asked to change it on first login.
+            </div>
+          ) : (
+            <div className="field">
+              <label>Password</label>
+              <input name="password" type="password" required minLength={6} />
+            </div>
+          )}
           {!isManager && role !== "ADMIN" && (
             <div className="field">
               <label>Building</label>
