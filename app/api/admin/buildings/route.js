@@ -7,7 +7,12 @@ async function GET(req) {
     return new Response(JSON.stringify({ error: "Admin access required." }), { status: 403 });
   }
 
+  // Admin is scoped to their assigned building if they have one.
+  // If no buildingId, show all (fallback for unassigned admins).
+  const where = session.buildingId ? { id: session.buildingId } : {};
+
   const buildings = await prisma.building.findMany({
+    where,
     include: {
       _count: { select: { users: true, vehicles: true } },
     },

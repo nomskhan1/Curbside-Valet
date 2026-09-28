@@ -21,8 +21,10 @@ async function GET(req) {
   // Admin sees all buildings unless a buildingId filter is provided.
   if (session.role === "STAFF" || session.role === "MANAGER") {
     where.vehicle = { buildingId: session.buildingId || "__none__" };
-  } else if (session.role === "ADMIN" && buildingId) {
-    where.vehicle = { buildingId };
+  } else if (session.role === "ADMIN") {
+    // Scope to assigned building, further filtered by dropdown selection
+    const effectiveBuildingId = buildingId || session.buildingId;
+    if (effectiveBuildingId) where.vehicle = { buildingId: effectiveBuildingId };
   }
 
   if (fromParam || toParam) {

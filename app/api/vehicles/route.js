@@ -12,7 +12,11 @@ async function GET(req) {
   } else if (session.role === "STAFF" || session.role === "MANAGER") {
     where = { buildingId: session.buildingId || "__none__", isVisitor: false };
   } else {
-    where = { isVisitor: false }; // ADMIN sees every building's real registered vehicles
+    // ADMIN is scoped to their assigned building if they have one.
+    where = {
+      isVisitor: false,
+      ...(session.buildingId ? { buildingId: session.buildingId } : {}),
+    };
   }
 
   const vehicles = await prisma.vehicle.findMany({

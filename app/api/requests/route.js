@@ -15,8 +15,12 @@ async function GET(req) {
       vehicle: { buildingId: session.buildingId || "__none__" }, // no buildingId = sees nothing, not everything
     };
   } else {
-    // ADMIN sees the active queue across every building.
-    where = { status: { in: ["WAITING", "PULLING", "READY"] } };
+    // ADMIN is scoped to their assigned building if they have one.
+    // Only SUPER_ADMIN sees all buildings.
+    where = {
+      status: { in: ["WAITING", "PULLING", "READY"] },
+      ...(session.buildingId ? { vehicle: { buildingId: session.buildingId } } : {}),
+    };
   }
 
   const requests = await prisma.request.findMany({
