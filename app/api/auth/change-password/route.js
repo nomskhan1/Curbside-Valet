@@ -1,5 +1,5 @@
-const prisma = require("../../../lib/db");
-const { getSessionFromRequest, hashPassword, verifyPassword } = require("../../../lib/auth");
+const prisma = require("../../../../lib/db");
+const { getSessionFromRequest, hashPassword, verifyPassword } = require("../../../../lib/auth");
 
 async function POST(req) {
   const session = getSessionFromRequest(req);
@@ -34,7 +34,7 @@ async function POST(req) {
     where: { id: session.id },
     data: {
       passwordHash: newHash,
-      mustChangePassword: false, // Clear the flag after successful change
+      mustChangePassword: false,
     },
   });
 
