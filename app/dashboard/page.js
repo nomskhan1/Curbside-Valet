@@ -3212,6 +3212,33 @@ function UserAdmin({ currentUser }) {
   const [editUserVehicleError, setEditUserVehicleError] = useState("");
   const [showAddVehicleForUser, setShowAddVehicleForUser] = useState(false);
   const [addVehicleForUserError, setAddVehicleForUserError] = useState("");
+  const [addVehiclePhotoPreview, setAddVehiclePhotoPreview] = useState(null);
+  const [addVehiclePhotoUploading, setAddVehiclePhotoUploading] = useState(false);
+  const [addVehiclePhotoUrl, setAddVehiclePhotoUrl] = useState(null);
+  const addVehicleCameraRef = useRef(null);
+  const addVehicleGalleryRef = useRef(null);
+
+  async function handleAddVehiclePhotoSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAddVehiclePhotoUploading(true);
+    try {
+      const dataUrl = await resizeImageFile(file);
+      setAddVehiclePhotoPreview(dataUrl);
+      const res = await fetch("/api/vehicles/upload-photo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: dataUrl }),
+      });
+      const data = await res.json();
+      if (res.ok) setAddVehiclePhotoUrl(data.url);
+      else setAddVehiclePhotoPreview(null);
+    } catch {
+      setAddVehiclePhotoPreview(null);
+    } finally {
+      setAddVehiclePhotoUploading(false);
+    }
+  }
   const [showImport, setShowImport] = useState(false);
   const [importResults, setImportResults] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -3308,6 +3335,7 @@ function UserAdmin({ currentUser }) {
       ticketNumber: form.ticketNumber.value,
       fuelType: form.fuelType.value,
       washDay: form.washDay ? form.washDay.value || null : null,
+      photoUrl: addVehiclePhotoUrl || null,
     };
     const res = await fetch("/api/vehicles", {
       method: "POST",
@@ -3320,6 +3348,8 @@ function UserAdmin({ currentUser }) {
       return;
     }
     form.reset();
+    setAddVehiclePhotoPreview(null);
+    setAddVehiclePhotoUrl(null);
     load();
   }
 
@@ -4092,13 +4122,43 @@ function UserAdmin({ currentUser }) {
                           <option value="SATURDAY">Saturday</option>
                         </select>
                       </div>
-                      <button className="btn btn-primary" type="submit">
+                      <div className="field">
+                        <label>Photo (optional)</label>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button type="button" className="btn btn-ghost" style={{ flex: 1 }}
+                            onClick={() => addVehicleCameraRef.current?.click()}
+                            disabled={addVehiclePhotoUploading}>
+                            📷 Take Photo
+                          </button>
+                          <button type="button" className="btn btn-ghost" style={{ flex: 1 }}
+                            onClick={() => addVehicleGalleryRef.current?.click()}
+                            disabled={addVehiclePhotoUploading}>
+                            🖼️ Choose Photo
+                          </button>
+                        </div>
+                        <input ref={addVehicleCameraRef} type="file" accept="image/*" capture="environment"
+                          onChange={handleAddVehiclePhotoSelect} style={{ display: "none" }} />
+                        <input ref={addVehicleGalleryRef} type="file" accept="image/*"
+                          onChange={handleAddVehiclePhotoSelect} style={{ display: "none" }} />
+                        {addVehiclePhotoUploading && (
+                          <p style={{ fontSize: 12, color: "var(--slate2)", marginTop: 6 }}>Uploading...</p>
+                        )}
+                        {addVehiclePhotoPreview && !addVehiclePhotoUploading && (
+                          <img src={addVehiclePhotoPreview} alt="Vehicle preview"
+                            style={{ marginTop: 10, maxWidth: "100%", borderRadius: 8, maxHeight: 160 }} />
+                        )}
+                      </div>
+                      <button className="btn btn-primary" type="submit" disabled={addVehiclePhotoUploading}>
                         Add vehicle
                       </button>
                       <button
                         className="btn btn-ghost"
                         type="button"
-                        onClick={() => setShowAddVehicleForUser(false)}
+                        onClick={() => {
+                          setShowAddVehicleForUser(false);
+                          setAddVehiclePhotoPreview(null);
+                          setAddVehiclePhotoUrl(null);
+                        }}
                       >
                         Done
                       </button>
