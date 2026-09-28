@@ -105,7 +105,7 @@ async function POST(req) {
 
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await prisma.user.create({
-    data: { username: resolvedUsername, passwordHash, name, role, buildingId: buildingId || null, unitNumber: unitNumber || null },
+    data: { username: resolvedUsername, passwordHash, name, role, buildingId: buildingId || null, unitNumber: unitNumber || null, mustChangePassword: role === "GUEST" ? true : false },
   });
 
   return new Response(
