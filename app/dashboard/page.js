@@ -3210,6 +3210,26 @@ function UserAdmin({ currentUser }) {
   const [editUserVehicleId, setEditUserVehicleId] = useState(null);
   const [editUserVehicle, setEditUserVehicle] = useState({});
   const [editUserVehicleError, setEditUserVehicleError] = useState("");
+  const [editVehiclePhotoUploading, setEditVehiclePhotoUploading] = useState(false);
+  const editVehicleCameraRef = useRef(null);
+  const editVehicleGalleryRef = useRef(null);
+
+  async function handleEditVehiclePhotoSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setEditVehiclePhotoUploading(true);
+    try {
+      const dataUrl = await resizeImageFile(file);
+      const res = await fetch("/api/vehicles/upload-photo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: dataUrl }),
+      });
+      const data = await res.json();
+      if (res.ok) setEditUserVehicle(prev => ({ ...prev, photoUrl: data.url }));
+    } catch {}
+    finally { setEditVehiclePhotoUploading(false); }
+  }
   const [showAddVehicleForUser, setShowAddVehicleForUser] = useState(false);
   const [addVehicleForUserError, setAddVehicleForUserError] = useState("");
   const [addVehiclePhotoPreview, setAddVehiclePhotoPreview] = useState(null);
@@ -4070,7 +4090,41 @@ function UserAdmin({ currentUser }) {
                                 }
                               />
                             </div>
-                            <button className="mini-btn start" onClick={() => saveEditUserVehicle(v.id)}>
+                            <div className="field">
+                              <label>Photo (optional)</label>
+                              {editUserVehicle.photoUrl && (
+                                <div style={{ position: "relative", marginBottom: 8 }}>
+                                  <img src={editUserVehicle.photoUrl} alt="Vehicle"
+                                    style={{ width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 8 }} />
+                                  <button type="button"
+                                    onClick={() => setEditUserVehicle(prev => ({ ...prev, photoUrl: null }))}
+                                    style={{ position: "absolute", top: 6, right: 6, background: "rgba(0,0,0,0.6)", border: "none", color: "#fff", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12 }}>
+                                    Remove
+                                  </button>
+                                </div>
+                              )}
+                              <div style={{ display: "flex", gap: 8 }}>
+                                <button type="button" className="btn btn-ghost" style={{ flex: 1, fontSize: 13 }}
+                                  onClick={() => editVehicleCameraRef.current?.click()}
+                                  disabled={editVehiclePhotoUploading}>
+                                  📷 {editUserVehicle.photoUrl ? "Replace" : "Take Photo"}
+                                </button>
+                                <button type="button" className="btn btn-ghost" style={{ flex: 1, fontSize: 13 }}
+                                  onClick={() => editVehicleGalleryRef.current?.click()}
+                                  disabled={editVehiclePhotoUploading}>
+                                  🖼️ Choose Photo
+                                </button>
+                              </div>
+                              <input ref={editVehicleCameraRef} type="file" accept="image/*" capture="environment"
+                                onChange={handleEditVehiclePhotoSelect} style={{ display: "none" }} />
+                              <input ref={editVehicleGalleryRef} type="file" accept="image/*"
+                                onChange={handleEditVehiclePhotoSelect} style={{ display: "none" }} />
+                              {editVehiclePhotoUploading && (
+                                <p style={{ fontSize: 12, color: "var(--slate2)", marginTop: 6 }}>Uploading...</p>
+                              )}
+                            </div>
+                            <button className="mini-btn start" onClick={() => saveEditUserVehicle(v.id)}
+                              disabled={editVehiclePhotoUploading}>
                               Save changes
                             </button>
                           </div>
