@@ -378,6 +378,8 @@ function SuperAdminView() {
   const logoInputRef = useRef(null);
 
   const [showAddAdmin, setShowAddAdmin] = useState(false);
+  const [editAdminId, setEditAdminId] = useState(null);
+  const [editAdminBuildings, setEditAdminBuildings] = useState([]);
 
   // Feature toggles for new building form
   const [newHasCarWash, setNewHasCarWash] = useState(true);
@@ -495,6 +497,26 @@ function SuperAdminView() {
     const data = await res.json();
     if (!res.ok) { setError(data.error || "Failed to delete garage."); return; }
     load();
+  }
+
+  async function updateAdminBuildings(adminId) {
+    setError("");
+    const res = await fetch(`/api/superadmin/admins/${adminId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ buildingIds: editAdminBuildings }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setError(data.error || "Failed to update."); return; }
+    setEditAdminId(null);
+    setEditAdminBuildings([]);
+    load();
+  }
+
+  function toggleEditBuilding(buildingId) {
+    setEditAdminBuildings(prev =>
+      prev.includes(buildingId) ? prev.filter(id => id !== buildingId) : [...prev, buildingId]
+    );
   }
 
   async function deleteAdmin(id, name) {
@@ -704,20 +726,73 @@ function SuperAdminView() {
 
       {loading ? null : (
         admins.map((a) => (
-          <div key={a.id} className="list-row">
-            <div>
-              <div style={{ fontWeight: 600 }}>{a.name}</div>
-              <div style={{ fontSize: 12, color: "var(--slate2)" }}>{a.username} · {a.building?.name || "No garage"}</div>
+          <div key={a.id} style={{ borderBottom: "1px solid var(--line)" }}>
+            <div className="list-row" style={{ borderBottom: "none" }}>
+              <div>
+                <div style={{ fontWeight: 600 }}>{a.name}</div>
+                <div style={{ fontSize: 12, color: "var(--slate2)" }}>
+                  {a.username} · {a.buildings?.length > 0 ? a.buildings.map(b => b.name).join(", ") : a.building?.name || "No garage assigned"}
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span className="role-tag">Admin</span>
+                <button
+                  onClick={() => {
+                    if (editAdminId === a.id) {
+                      setEditAdminId(null);
+                      setEditAdminBuildings([]);
+                    } else {
+                      setEditAdminId(a.id);
+                      // Pre-select current buildings
+                      const current = a.buildings?.map(b => b.id) || (a.building ? [a.building.id] : []);
+                      setEditAdminBuildings(current);
+                    }
+                  }}
+                  style={{ background: "none", border: "none", color: "var(--gold)", fontSize: 11, cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.04em" }}
+                >
+                  {editAdminId === a.id ? "Cancel" : "Edit"}
+                </button>
+                <button
+                  onClick={() => deleteAdmin(a.id, a.name)}
+                  style={{ background: "none", border: "none", color: "var(--red)", fontSize: 11, cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.04em" }}
+                >
+                  Remove
+                </button>
+              </div>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <span className="role-tag">Admin</span>
-              <button
-                onClick={() => deleteAdmin(a.id, a.name)}
-                style={{ background: "none", border: "none", color: "var(--red)", fontSize: 11, cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.04em" }}
-              >
-                Remove
-              </button>
-            </div>
+            {editAdminId === a.id && (
+              <div style={{ padding: "12px 0 16px" }}>
+                <div style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--slate2)", marginBottom: 12 }}>
+                  Assign garages to {a.name}
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+                  {buildings.map(b => (
+                    <label key={b.id} style={{
+                      display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13,
+                      background: editAdminBuildings.includes(b.id) ? "rgba(201,162,39,0.15)" : "var(--navy-2)",
+                      border: `1px solid ${editAdminBuildings.includes(b.id) ? "var(--gold)" : "var(--line)"}`,
+                      borderRadius: 8, padding: "8px 12px",
+                      color: editAdminBuildings.includes(b.id) ? "var(--gold)" : "var(--cream)",
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={editAdminBuildings.includes(b.id)}
+                        onChange={() => toggleEditBuilding(b.id)}
+                        style={{ width: "auto" }}
+                      />
+                      {b.name}
+                    </label>
+                  ))}
+                </div>
+                <button
+                  className="btn btn-primary"
+                  style={{ width: "auto", padding: "10px 20px" }}
+                  onClick={() => updateAdminBuildings(a.id)}
+                >
+                  Save assignments
+                </button>
+              </div>
+            )}
           </div>
         ))
       )}
