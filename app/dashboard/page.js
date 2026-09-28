@@ -2284,6 +2284,7 @@ function BuildingsView({ onSelectBuilding }) {
   const [buildings, setBuildings] = useState([]);
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [buildingFilter, setBuildingFilter] = useState("ALL");
 
   const load = useCallback(async () => {
     const res = await fetch("/api/admin/buildings");
@@ -2325,24 +2326,45 @@ function BuildingsView({ onSelectBuilding }) {
     load();
   }
 
+  const totalCars = buildings.reduce((sum, b) => sum + (b._count?.vehicles ?? 0), 0);
+  const filtered = buildingFilter === "ALL" ? buildings : buildings.filter(b => b.id === buildingFilter);
+
   return (
     <>
       <div className="queue-header">
         <h1 className="title" style={{ marginBottom: 2 }}>
           Buildings
         </h1>
-        <span className="count-badge">{buildings.length} locations</span>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <span className="count-badge">{buildings.length} locations</span>
+          <span className="count-badge">{totalCars} cars</span>
+        </div>
       </div>
       {error && <div className="error-box">{error}</div>}
 
-      {buildings.length === 0 && (
+      {/* Building filter dropdown */}
+      {buildings.length > 1 && (
+        <div className="field" style={{ marginBottom: 16 }}>
+          <label>Filter by building</label>
+          <select value={buildingFilter} onChange={e => setBuildingFilter(e.target.value)}>
+            <option value="ALL">All buildings ({buildings.length})</option>
+            {buildings.map(b => (
+              <option key={b.id} value={b.id}>
+                {b.name} ({b._count?.vehicles ?? 0} cars)
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {filtered.length === 0 && (
         <div className="empty-state">
           <div className="big">No buildings yet</div>
           Ask your Super Admin to add a garage and assign it to your account.
         </div>
       )}
 
-      {buildings.map((b) => (
+      {filtered.map((b) => (
         <div key={b.id} className="queue-item">
           <div
             className="queue-info"
@@ -2354,7 +2376,7 @@ function BuildingsView({ onSelectBuilding }) {
             <div className="meta">
               {b.address || "No address on file"} · {b._count?.users ?? 0} accounts ·{" "}
               <span style={{ color: "var(--brass-light)", textDecoration: "underline" }}>
-                {b._count?.vehicles ?? 0} vehicles
+                {b._count?.vehicles ?? 0} cars
               </span>
             </div>
           </div>
@@ -2365,7 +2387,6 @@ function BuildingsView({ onSelectBuilding }) {
           </div>
         </div>
       ))}
-
     </>
   );
 }
