@@ -1,5 +1,6 @@
+const bcrypt = require("bcryptjs");
 const prisma = require("../../../../lib/db");
-const { getSessionFromRequest, hashPassword, verifyPassword } = require("../../../../lib/auth");
+const { getSessionFromRequest } = require("../../../../lib/auth");
 
 async function POST(req) {
   const session = getSessionFromRequest(req);
@@ -23,12 +24,12 @@ async function POST(req) {
     return new Response(JSON.stringify({ error: "User not found." }), { status: 404 });
   }
 
-  const valid = await verifyPassword(currentPassword, user.passwordHash);
+  const valid = await bcrypt.compare(currentPassword, user.passwordHash);
   if (!valid) {
     return new Response(JSON.stringify({ error: "Current password is incorrect." }), { status: 400 });
   }
 
-  const newHash = await hashPassword(newPassword);
+  const newHash = await bcrypt.hash(newPassword, 10);
 
   await prisma.user.update({
     where: { id: session.id },
