@@ -7,14 +7,29 @@ async function GET(req) {
     return new Response(JSON.stringify({ user: null }), { status: 200 });
   }
 
-  // Fetch mustChangePassword from DB — everything else comes from session
   try {
     const dbUser = await prisma.user.findUnique({
       where: { id: session.id },
-      select: { mustChangePassword: true },
+      select: {
+        mustChangePassword: true,
+        building: {
+          select: {
+            id: true,
+            name: true,
+            logoUrl: true,
+            hasCarWash: true,
+            hasEvCharging: true,
+          },
+        },
+      },
     });
+
     return new Response(JSON.stringify({
-      user: { ...session, mustChangePassword: dbUser?.mustChangePassword || false }
+      user: {
+        ...session,
+        mustChangePassword: dbUser?.mustChangePassword || false,
+        building: dbUser?.building || session.building || null,
+      }
     }), { status: 200 });
   } catch {
     return new Response(JSON.stringify({ user: session }), { status: 200 });
