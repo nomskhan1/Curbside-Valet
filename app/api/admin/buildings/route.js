@@ -7,9 +7,17 @@ async function GET(req) {
     return new Response(JSON.stringify({ error: "Admin access required." }), { status: 403 });
   }
 
-  // Admin is scoped to their assigned building if they have one.
-  // If no buildingId, show all (fallback for unassigned admins).
-  const where = session.buildingId ? { id: session.buildingId } : {};
+  // Get all buildings assigned to this admin via AdminBuilding junction
+  const adminBuildings = await prisma.adminBuilding.findMany({
+    where: { adminId: session.id },
+    select: { buildingId: true },
+  });
+  const buildingIds = adminBuildings.map(ab => ab.buildingId);
+
+  // Fallback to primary buildingId if no AdminBuilding records exist
+  const where = buildingIds.length > 0
+    ? { id: { in: buildingIds } }
+    : session.buildingId ? { id: session.buildingId } : {};
 
   const buildings = await prisma.building.findMany({
     where,

@@ -2,9 +2,6 @@ const bcrypt = require("bcryptjs");
 const prisma = require("../../../../lib/db");
 const { getSessionFromRequest } = require("../../../../lib/auth");
 
-// Super Admin's only account-creation power: making an Admin account and
-// assigning it to one garage. Does not touch /api/admin/users (the
-// existing ADMIN-facing account creation route) at all.
 async function GET(req) {
   const session = getSessionFromRequest(req);
   if (!session || session.role !== "SUPER_ADMIN") {
@@ -19,6 +16,9 @@ async function GET(req) {
       username: true,
       createdAt: true,
       building: { select: { id: true, name: true } },
+      adminBuildings: {
+        include: { building: { select: { id: true, name: true } } },
+      },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -41,9 +41,7 @@ async function POST(req) {
     );
   }
   if (password.length < 6) {
-    return new Response(JSON.stringify({ error: "Password must be at least 6 characters." }), {
-      status: 400,
-    });
+    return new Response(JSON.stringify({ error: "Password must be at least 6 characters." }), { status: 400 });
   }
 
   const building = await prisma.building.findUnique({ where: { id: buildingId } });
@@ -64,8 +62,19 @@ async function POST(req) {
       passwordHash,
       role: "ADMIN",
       buildingId,
+      adminBuildings: {
+        create: [{ buildingId }],
+      },
     },
-    select: { id: true, name: true, username: true, building: { select: { name: true } } },
+    select: {
+      id: true,
+      name: true,
+      username: true,
+      building: { select: { id: true, name: true } },
+      adminBuildings: {
+        include: { building: { select: { id: true, name: true } } },
+      },
+    },
   });
 
   return new Response(JSON.stringify(admin), { status: 201 });

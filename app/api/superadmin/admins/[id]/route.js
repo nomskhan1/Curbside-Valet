@@ -15,14 +15,26 @@ async function PATCH(req, { params }) {
     return new Response(JSON.stringify({ error: "buildingIds must be an array." }), { status: 400 });
   }
 
-  // For simplicity, assign the first buildingId as the primary building
-  // (the schema has a single buildingId on User)
+  // Set primary buildingId to first selected building
   const primaryBuildingId = buildingIds.length > 0 ? buildingIds[0] : null;
 
+  // Delete existing AdminBuilding records and recreate
+  await prisma.adminBuilding.deleteMany({ where: { adminId: id } });
+
+  if (buildingIds.length > 0) {
+    await prisma.adminBuilding.createMany({
+      data: buildingIds.map(buildingId => ({ adminId: id, buildingId })),
+    });
+  }
+
+  // Update primary buildingId on User
   const user = await prisma.user.update({
     where: { id },
     data: { buildingId: primaryBuildingId },
-    include: { building: true },
+    include: {
+      building: true,
+      adminBuildings: { include: { building: true } },
+    },
   });
 
   return new Response(JSON.stringify(user), { status: 200 });
@@ -37,10 +49,10 @@ async function DELETE(req, { params }) {
   const { id } = params;
 
   try {
+    await prisma.adminBuilding.deleteMany({ where: { adminId: id } });
     await prisma.user.delete({ where: { id } });
     return new Response(JSON.stringify({ ok: true }), { status: 200 });
   } catch (err) {
-    console.error("Delete admin error:", err);
     return new Response(JSON.stringify({ error: "Failed to delete admin. " + err.message }), { status: 500 });
   }
 }

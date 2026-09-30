@@ -15,11 +15,15 @@ async function GET(req) {
       vehicle: { buildingId: session.buildingId || "__none__" }, // no buildingId = sees nothing, not everything
     };
   } else {
-    // ADMIN is scoped to their assigned building if they have one.
-    // Only SUPER_ADMIN sees all buildings.
+    // ADMIN scoped to their assigned buildings via AdminBuilding junction
+    const adminBuildings = await prisma.adminBuilding.findMany({
+      where: { adminId: session.id },
+      select: { buildingId: true },
+    });
+    const buildingIds = adminBuildings.map(ab => ab.buildingId);
     where = {
       status: { in: ["WAITING", "PULLING", "READY"] },
-      ...(session.buildingId ? { vehicle: { buildingId: session.buildingId } } : {}),
+      ...(buildingIds.length > 0 ? { vehicle: { buildingId: { in: buildingIds } } } : {}),
     };
   }
 

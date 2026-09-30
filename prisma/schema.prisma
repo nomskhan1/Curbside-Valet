@@ -1,6 +1,4 @@
 // Prisma schema for Curbside Valet
-// Production datasource is Postgres (Neon).
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,28 +8,30 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Note: role/status/type are plain strings (not native enums) for portability.
-// Valid values are enforced in application code
-// (see lib/auth.js and the API routes in app/api/).
-// role:   "GUEST" | "STAFF" | "MANAGER" | "ADMIN"
-// status: "WAITING" | "PULLING" | "READY" | "COMPLETED" | "CANCELLED"
-// type:   "PICKUP" | "CHARGE"
-
 model Building {
   id        String   @id @default(cuid())
   name      String
   address   String?
   createdAt DateTime @default(now())
-
-  // Uploaded by Super Admin when creating/branding a garage.
-  logoUrl String?
-
-  // Feature toggles — controlled by Super Admin or Admin
+  logoUrl   String?
   hasCarWash    Boolean @default(true)
   hasEvCharging Boolean @default(true)
 
-  users    User[]
-  vehicles Vehicle[]
+  users        User[]
+  vehicles     Vehicle[]
+  adminBuildings AdminBuilding[]
+}
+
+// Junction table for Admin → multiple Buildings
+model AdminBuilding {
+  id         String   @id @default(cuid())
+  adminId    String
+  admin      User     @relation(fields: [adminId], references: [id])
+  buildingId String
+  building   Building @relation(fields: [buildingId], references: [id])
+  createdAt  DateTime @default(now())
+
+  @@unique([adminId, buildingId])
 }
 
 model User {
@@ -42,26 +42,21 @@ model User {
   role         String   @default("GUEST")
   createdAt    DateTime @default(now())
 
-  // Which building this account belongs to. ADMIN accounts are typically
-  // global and can leave this null; STAFF and GUEST should always have one.
   buildingId String?
   building   Building? @relation(fields: [buildingId], references: [id])
 
-  // Unit number for Monthly Parker accounts — the apartment/condo unit
-  // they park for. Optional and freeform.
-  unitNumber String?
-
-  // When true, user is forced to change their password on next login.
+  unitNumber         String?
   mustChangePassword Boolean @default(false)
 
   vehicles        Vehicle[]
   requests        Request[] @relation("RequestedBy")
   handledRequests Request[] @relation("HandledBy")
   washLogs        WashLog[]
+  adminBuildings  AdminBuilding[]
 }
 
 model Vehicle {
-  id           String  @id @default(cuid())
+  id           String   @id @default(cuid())
   make         String?
   model        String?
   color        String?
@@ -70,68 +65,29 @@ model Vehicle {
   ownerId      String
   owner        User     @relation(fields: [ownerId], references: [id])
   createdAt    DateTime @default(now())
-
-  // True when this vehicle was registered on the fly by a resident
-  // requesting pickup for a visitor's car, rather than their own.
-  isVisitor Boolean @default(false)
-
-  // "GASOLINE" | "ELECTRIC" | "PLUGIN_HYBRID" — determines whether the
-  // charging request option is available for this vehicle.
-  fuelType String @default("GASOLINE")
-
-  // URL of an uploaded photo (stored in Vercel Blob), so staff can visually
-  // identify the car. Optional.
-  photoUrl String?
-
-  // Random secret encoded in the guest-facing QR code. Lets someone with
-  // no account/login hit a public page and request this specific vehicle.
-  // Nullable so existing vehicles don't need a backfill to keep working.
-  claimToken String? @unique
-
-  // Denormalized from the owner's building at creation time, so queue
-  // queries can filter by building without an extra join.
-  buildingId String?
-  building   Building? @relation(fields: [buildingId], references: [id])
-
-  // Parking section/zone — mainly used for monthly parkers, where the
-  // "ticket number" field doubles as their decal number. Optional and
-  // freeform since section naming varies by garage.
-  section String?
-
-  // Specific parking spot/location within the garage (e.g. "Level 2, Spot 14").
-  // Freeform since layouts vary by garage.
-  location String?
-
-  // Recurring weekly car wash day assigned at registration, e.g. "TUESDAY".
-  // Null means this vehicle isn't enrolled in car wash service.
-  washDay String?
+  isVisitor    Boolean  @default(false)
+  fuelType     String   @default("GASOLINE")
+  photoUrl     String?
+  claimToken   String?  @unique
+  buildingId   String?
+  building     Building? @relation(fields: [buildingId], references: [id])
+  section      String?
+  location     String?
+  washDay      String?
 
   requests  Request[]
   washLogs  WashLog[]
 }
 
 model WashLog {
-  id        String   @id @default(cuid())
-  vehicleId String
-  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id])
-
-  // The calendar date the wash was completed (not just the weekday, so a
-  // report can show an actual timeline and duplicates on the same date can
-  // be prevented).
-  washDate DateTime
-
-  // Staff type their own initials at completion time, rather than the
-  // system auto-filling from their account — matches how a paper log would
-  // normally work.
-  initials String
-
-  // Whoever was logged in when this was submitted — lets a manager/admin
-  // trace back to an account even though "initials" is the primary record,
-  // and supports the "manager/admin can override" requirement.
+  id            String   @id @default(cuid())
+  vehicleId     String
+  vehicle       Vehicle  @relation(fields: [vehicleId], references: [id])
+  washDate      DateTime
+  initials      String
   completedById String?
   completedBy   User?    @relation(fields: [completedById], references: [id])
-
-  createdAt DateTime @default(now())
+  createdAt     DateTime @default(now())
 
   @@unique([vehicleId, washDate])
 }
@@ -145,12 +101,8 @@ model Request {
   handledById   String?
   handledBy     User?     @relation("HandledBy", fields: [handledById], references: [id])
   status        String    @default("WAITING")
-  // PICKUP = bring the car around. CHARGE = plug in / charge while parked,
-  // independent of any pickup request for the same vehicle.
   type          String    @default("PICKUP")
   etaMinutes    Int       @default(0)
-  // If set, this is a request for a future pickup time rather than "right now".
-  // Staff still see it in the queue (so nothing gets missed), labeled with the time.
   scheduledFor  DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

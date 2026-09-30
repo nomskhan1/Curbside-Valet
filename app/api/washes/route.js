@@ -37,8 +37,13 @@ async function GET(req) {
   if (session.role === "STAFF" || session.role === "MANAGER") {
     where.buildingId = session.buildingId || "__none__";
   } else if (session.role === "ADMIN") {
-    const effectiveBuildingId = buildingId || session.buildingId;
-    if (effectiveBuildingId) where.buildingId = effectiveBuildingId;
+    const adminBuildings = await prisma.adminBuilding.findMany({
+      where: { adminId: session.id },
+      select: { buildingId: true },
+    });
+    const buildingIds = adminBuildings.map(ab => ab.buildingId);
+    const effectiveIds = buildingId ? [buildingId] : buildingIds;
+    if (effectiveIds.length > 0) where.buildingId = { in: effectiveIds };
   }
 
   const vehicles = await prisma.vehicle.findMany({

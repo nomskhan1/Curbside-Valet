@@ -731,7 +731,11 @@ function SuperAdminView() {
               <div>
                 <div style={{ fontWeight: 600 }}>{a.name}</div>
                 <div style={{ fontSize: 12, color: "var(--slate2)" }}>
-                  {a.username} · {a.building?.name || "No garage assigned"}
+                  {a.username} · {
+                    a.adminBuildings?.length > 0
+                      ? a.adminBuildings.map(ab => ab.building.name).join(", ")
+                      : a.building?.name || "No garage assigned"
+                  }
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -743,7 +747,10 @@ function SuperAdminView() {
                       setEditAdminBuildings([]);
                     } else {
                       setEditAdminId(a.id);
-                      setEditAdminBuildings(a.building ? [a.building.id] : []);
+                      const current = a.adminBuildings?.length > 0
+                        ? a.adminBuildings.map(ab => ab.buildingId)
+                        : a.building ? [a.building.id] : [];
+                      setEditAdminBuildings(current);
                     }
                   }}
                   style={{ background: "none", border: "none", color: "var(--gold)", fontSize: 11, cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.04em" }}
@@ -1242,6 +1249,243 @@ function playAlertSound() {
   } catch {}
 }
 
+function timeAgo(dateStr) {
+  const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000);
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
+
+function isTomorrow(dateStr) {
+  const d = new Date(dateStr);
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return d.toDateString() === tomorrow.toDateString();
+}
+
+function NewQueueView({ requests, advance, setZoomedPhoto, user, vehicleLabel, firstName, load }) {
+  const now = new Date();
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(0, 0, 0, 0);
+  const dayAfter = new Date(tomorrow);
+  dayAfter.setDate(dayAfter.getDate() + 1);
+
+  // Incoming — WAITING and not future
+  const incoming = requests.filter(r =>
+    r.status === "WAITING" && r.type === "PICKUP" &&
+    (!r.scheduledFor || new Date(r.scheduledFor) <= now)
+  );
+
+  // Active — PULLING or READY
+  const active = requests.filter(r =>
+    ["PULLING", "READY"].includes(r.status)
+  );
+
+  // Tomorrow's pickups
+  const tomorrowPickups = requests.filter(r =>
+    r.scheduledFor && isTomorrow(r.scheduledFor) && r.status === "WAITING"
+  );
+
+  // Future pickups (beyond tomorrow)
+  const futurePickups = requests.filter(r =>
+    r.scheduledFor && new Date(r.scheduledFor) >= dayAfter && r.status === "WAITING"
+  );
+
+  // Charging requests
+  const chargingRequests = requests.filter(r => r.type === "CHARGE" && r.status === "WAITING");
+
+  function QueueCard({ r, showAccept, showReady, showComplete, showMoveToActive }) {
+    const vehicleParts = [r.vehicle.color, r.vehicle.make, r.vehicle.model].filter(Boolean);
+    const location = [r.vehicle.section ? `Sec ${r.vehicle.section}` : null, r.vehicle.location].filter(Boolean).join(" · ");
+
+    return (
+      <div style={{
+        background: "var(--navy-2)",
+        border: "1px solid var(--line)",
+        borderRadius: 12,
+        padding: "14px 16px",
+        marginBottom: 10,
+        display: "flex",
+        gap: 14,
+        alignItems: "flex-start",
+      }}>
+        {/* Photo or placeholder */}
+        {r.vehicle.photoUrl ? (
+          <img src={r.vehicle.photoUrl} alt="" onClick={() => setZoomedPhoto(r.vehicle.photoUrl)}
+            style={{ width: 52, height: 52, borderRadius: 8, objectFit: "cover", flexShrink: 0, cursor: "pointer" }} />
+        ) : (
+          <div style={{ width: 52, height: 52, borderRadius: 8, background: "var(--navy)", border: "1px solid var(--line)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "var(--slate2)", textAlign: "center", lineHeight: 1.3 }}>
+            No photo
+          </div>
+        )}
+
+        {/* Info */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 3 }}>
+            <span style={{ fontWeight: 700, fontSize: 15, color: "var(--cream)" }}>
+              {firstName(r.requestedBy.name)}
+            </span>
+            {r.type === "CHARGE" && (
+              <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 10, border: "1px solid var(--brass)", color: "var(--brass-light)", textTransform: "uppercase" }}>⚡ Charging</span>
+            )}
+            {r.vehicle.isVisitor && (
+              <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 10, border: "1px solid var(--line)", color: "var(--slate2)", textTransform: "uppercase" }}>Visitor</span>
+            )}
+          </div>
+          {vehicleParts.length > 0 && (
+            <div style={{ fontSize: 13, color: "var(--slate2)", marginBottom: 2 }}>
+              {vehicleParts.join(" ")}
+            </div>
+          )}
+          <div style={{ fontSize: 12, color: "var(--brass-light)", marginBottom: 2 }}>
+            {r.vehicle.ticketNumber}
+            {location ? ` · ${location}` : ""}
+            {r.vehicle.building ? ` · ${r.vehicle.building.name}` : ""}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--slate2)" }}>
+            {r.scheduledFor
+              ? `Scheduled ${new Date(r.scheduledFor).toLocaleString()}`
+              : timeAgo(r.createdAt)
+            }
+            {" · "}
+            <span style={{
+              fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, textTransform: "uppercase",
+              background: r.status === "WAITING" ? "rgba(201,162,39,0.15)" : r.status === "PULLING" ? "rgba(74,120,86,0.15)" : "rgba(34,197,94,0.15)",
+              color: r.status === "WAITING" ? "var(--brass-light)" : r.status === "PULLING" ? "var(--green)" : "#86EFAC",
+            }}>
+              {r.status === "WAITING" ? "Pending" : r.status === "PULLING" ? "Accepted" : "Ready"}
+            </span>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0 }}>
+          {showAccept && (
+            <button className="mini-btn start" onClick={() => advance(r.id, "PULLING")}>
+              Accept
+            </button>
+          )}
+          {showReady && (
+            <button className="mini-btn ready" onClick={() => advance(r.id, "READY")}>
+              Ready
+            </button>
+          )}
+          {showComplete && (
+            <button className="mini-btn done" onClick={() => advance(r.id, "COMPLETED")}>
+              Complete
+            </button>
+          )}
+          {showMoveToActive && (
+            <button className="mini-btn start" onClick={() => advance(r.id, "PULLING")}>
+              Move to active
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const totalActive = incoming.length + active.length + chargingRequests.length;
+
+  return (
+    <>
+      {/* Incoming alert banner */}
+      {incoming.length > 0 && (
+        <div style={{
+          background: "rgba(201,162,39,0.12)",
+          border: "1.5px solid var(--brass)",
+          borderRadius: 12,
+          padding: "12px 16px",
+          marginBottom: 20,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}>
+          <div>
+            <div style={{ fontWeight: 700, color: "var(--brass-light)", fontSize: 14 }}>
+              🔔 {incoming.length} request{incoming.length > 1 ? "s" : ""} awaiting acceptance
+            </div>
+            <div style={{ fontSize: 12, color: "var(--slate2)", marginTop: 2 }}>
+              Accept to stop the alert
+            </div>
+          </div>
+          <span style={{ fontSize: 28, fontWeight: 700, color: "var(--brass-light)" }}>{incoming.length}</span>
+        </div>
+      )}
+
+      {/* Incoming section */}
+      {incoming.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--brass-light)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Incoming</span>
+            <span style={{ background: "var(--brass)", color: "var(--navy)", borderRadius: 10, padding: "1px 8px", fontSize: 12, fontWeight: 700 }}>{incoming.length}</span>
+          </div>
+          {incoming.map(r => <QueueCard key={r.id} r={r} showAccept />)}
+        </div>
+      )}
+
+      {/* Charging requests */}
+      {chargingRequests.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--brass-light)", textTransform: "uppercase", letterSpacing: "0.08em" }}>⚡ Charging requests</span>
+            <span style={{ background: "var(--brass)", color: "var(--navy)", borderRadius: 10, padding: "1px 8px", fontSize: 12, fontWeight: 700 }}>{chargingRequests.length}</span>
+          </div>
+          {chargingRequests.map(r => <QueueCard key={r.id} r={r} showAccept />)}
+        </div>
+      )}
+
+      {/* Active queue */}
+      {active.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--green)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Active queue</span>
+            <span style={{ background: "var(--green)", color: "var(--navy)", borderRadius: 10, padding: "1px 8px", fontSize: 12, fontWeight: 700 }}>{active.length}</span>
+          </div>
+          {active.map(r => (
+            <QueueCard key={r.id} r={r}
+              showReady={r.status === "PULLING"}
+              showComplete={r.status === "READY"}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {totalActive === 0 && tomorrowPickups.length === 0 && futurePickups.length === 0 && (
+        <div className="empty-state">
+          <div className="big">Queue is clear</div>
+          All caught up — no pending pickups.
+        </div>
+      )}
+
+      {/* Tomorrow's pickups */}
+      {tomorrowPickups.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--slate2)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Tomorrow's pickups</span>
+            <span style={{ background: "var(--navy-2)", color: "var(--slate2)", borderRadius: 10, padding: "1px 8px", fontSize: 12, fontWeight: 700, border: "1px solid var(--line)" }}>{tomorrowPickups.length}</span>
+          </div>
+          {tomorrowPickups.map(r => <QueueCard key={r.id} r={r} showMoveToActive />)}
+        </div>
+      )}
+
+      {/* Future pickups */}
+      {futurePickups.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--slate2)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Future pickups</span>
+            <span style={{ background: "var(--navy-2)", color: "var(--slate2)", borderRadius: 10, padding: "1px 8px", fontSize: 12, fontWeight: 700, border: "1px solid var(--line)" }}>{futurePickups.length}</span>
+          </div>
+          {futurePickups.map(r => <QueueCard key={r.id} r={r} showMoveToActive />)}
+        </div>
+      )}
+    </>
+  );
+}
+
 function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilterBuilding, onLogoUpdated }) {
   const [requests, setRequests] = useState([]);
   const [alertsEnabled, setAlertsEnabled] = useState(false);
@@ -1389,131 +1633,17 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
       )}
 
       {tab === "queue" && (
-        <>
-          <div className="queue-header">
-            <h1 className="title" style={{ marginBottom: 2 }}>
-              Pickup queue
-            </h1>
-            <span className="count-badge">{requests.length} waiting</span>
-          </div>
-
-          {requests.length === 0 ? (
-            <div className="empty-state">
-              <div className="big">Queue is clear</div>
-              All caught up — no pending pickups.
-            </div>
-          ) : (
-            requests.map((r) => {
-              const isFuture = r.scheduledFor && new Date(r.scheduledFor) > new Date();
-              return (
-                <div
-                  key={r.id}
-                  className="queue-item"
-                  style={
-                    isFuture
-                      ? { borderColor: "#7C6AD8", background: "rgba(124,106,216,0.06)" }
-                      : undefined
-                  }
-                >
-                  {r.vehicle.photoUrl ? (
-                    <img
-                      src={r.vehicle.photoUrl}
-                      alt=""
-                      onClick={() => setZoomedPhoto(r.vehicle.photoUrl)}
-                      style={{
-                        width: 46,
-                        height: 46,
-                        borderRadius: 8,
-                        objectFit: "cover",
-                        flexShrink: 0,
-                        cursor: "pointer",
-                      }}
-                    />
-                  ) : (
-                    <div className="queue-num">#{r.vehicle.ticketNumber}</div>
-                  )}
-                  <div className="queue-info">
-                    <div className="car">
-                      {r.vehicle.photoUrl && (
-                        <span style={{ color: "var(--brass-light)", marginRight: 6 }}>
-                          #{r.vehicle.ticketNumber}
-                        </span>
-                      )}
-                      {vehicleLabel(r.vehicle)}
-                      {r.vehicle.section && (
-                        <span style={{ color: "var(--slate2)", marginLeft: 6, fontSize: 13 }}>
-                          · Sec {r.vehicle.section}
-                        </span>
-                      )}
-                      {r.vehicle.isVisitor && (
-                        <span
-                          style={{
-                            marginLeft: 8,
-                            fontSize: 10,
-                            padding: "2px 7px",
-                            borderRadius: 10,
-                            border: "1px solid var(--line)",
-                            color: "var(--slate2)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.06em",
-                          }}
-                        >
-                          Visitor
-                        </span>
-                      )}
-                      {r.type === "CHARGE" && (
-                        <span
-                          style={{
-                            marginLeft: 8,
-                            fontSize: 10,
-                            padding: "2px 7px",
-                            borderRadius: 10,
-                            border: "1px solid var(--brass)",
-                            color: "var(--brass-light)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.06em",
-                          }}
-                        >
-                          ⚡ Charging
-                        </span>
-                      )}
-                    </div>
-                    <div className="meta">
-                      {firstName(r.requestedBy.name)}
-                      {r.vehicle.building ? ` · ${r.vehicle.building.name}` : ""} ·{" "}
-                      {r.type === "CHARGE" ? CHARGE_STATUS_LABEL[r.status] : STATUS_LABEL[r.status]}
-                      {isFuture && (
-                        <span style={{ color: "var(--brass-light)", marginLeft: 6 }}>
-                          · scheduled {new Date(r.scheduledFor).toLocaleString()}
-                        </span>
-                      )}
-                      {r.status === "WAITING" && !isFuture && (
-                        <span style={{ color: "var(--brass-light)", marginLeft: 6 }}>● ringing</span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="queue-actions">
-                    {r.status === "WAITING" && (
-                      <button className="mini-btn start" onClick={() => advance(r.id, "PULLING")}>
-                        {r.type === "CHARGE" ? "Start charging" : "Start pull"}
-                      </button>
-                    )}
-                    {r.status === "PULLING" && (
-                      <button className="mini-btn ready" onClick={() => advance(r.id, "READY")}>
-                        {r.type === "CHARGE" ? "Mark charged" : "Mark ready"}
-                      </button>
-                    )}
-                    {r.status === "READY" && (
-                      <button className="mini-btn done" onClick={() => advance(r.id, "COMPLETED")}>
-                        Complete
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </>
+        <NewQueueView
+          requests={requests}
+          advance={advance}
+          setZoomedPhoto={setZoomedPhoto}
+          user={user}
+          vehicleLabel={vehicleLabel}
+          firstName={firstName}
+          load={() => {
+            fetch("/api/requests").then(r => r.json()).then(setRequests);
+          }}
+        />
       )}
 
       {tab === "history" && (user.role === "ADMIN" || user.role === "STAFF" || user.role === "MANAGER") && <HistoryView user={user} />}

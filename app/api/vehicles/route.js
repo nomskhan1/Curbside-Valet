@@ -12,10 +12,15 @@ async function GET(req) {
   } else if (session.role === "STAFF" || session.role === "MANAGER") {
     where = { buildingId: session.buildingId || "__none__", isVisitor: false };
   } else {
-    // ADMIN is scoped to their assigned building if they have one.
+    // ADMIN scoped to their assigned buildings via AdminBuilding junction
+    const adminBuildings = await prisma.adminBuilding.findMany({
+      where: { adminId: session.id },
+      select: { buildingId: true },
+    });
+    const buildingIds = adminBuildings.map(ab => ab.buildingId);
     where = {
       isVisitor: false,
-      ...(session.buildingId ? { buildingId: session.buildingId } : {}),
+      ...(buildingIds.length > 0 ? { buildingId: { in: buildingIds } } : {}),
     };
   }
 
