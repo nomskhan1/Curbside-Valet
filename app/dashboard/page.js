@@ -122,7 +122,12 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="shell">
+    <div
+      className={
+        "shell" +
+        (user.role !== "GUEST" ? " shell-wide" : "")
+      }
+    >
       <header className="topbar" style={{ position: "relative", flexWrap: "wrap", rowGap: 6 }}>
         <div className="brand">
           <img src="/logo.png" alt="" className="logo" />
@@ -1277,56 +1282,194 @@ function isTomorrow(dateStr) {
   return d.toDateString() === tomorrow.toDateString();
 }
 
-const QUEUE_CHIP = {
-  base: { fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 20, textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap" },
-  Immediate: { background: "rgba(176,65,62,0.10)", color: "var(--red)" },
-  Future: { background: "rgba(107,114,128,0.12)", color: "var(--slate2)" },
-  Pending: { background: "rgba(201,162,39,0.16)", color: "var(--brass-light)" },
-  Accepted: { background: "rgba(74,120,86,0.14)", color: "var(--green)" },
-  Ready: { background: "var(--green)", color: "#fff" },
-  Charging: { background: "transparent", border: "1px solid var(--brass)", color: "var(--brass-light)" },
-  Visitor: { background: "transparent", border: "1px solid var(--line)", color: "var(--slate2)" },
-};
-
-function QueueChip({ kind, label }) {
-  return <span style={{ ...QUEUE_CHIP.base, ...QUEUE_CHIP[kind] }}>{label || kind}</span>;
+// Small line icons for the queue board (stroke follows the text colour).
+function VqIcon({ name, size = 14 }) {
+  const paths = {
+    bell: (
+      <>
+        <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+        <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+      </>
+    ),
+    check: <path d="M20 6 9 17l-5-5" />,
+    clock: (
+      <>
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 6v6l4 2" />
+      </>
+    ),
+    pin: (
+      <>
+        <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+        <circle cx="12" cy="10" r="3" />
+      </>
+    ),
+    undo: (
+      <>
+        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+        <path d="M3 3v5h5" />
+      </>
+    ),
+    up: (
+      <>
+        <circle cx="12" cy="12" r="10" />
+        <path d="m16 12-4-4-4 4" />
+        <path d="M12 16V8" />
+      </>
+    ),
+    car: (
+      <>
+        <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2" />
+        <circle cx="7" cy="17" r="2" />
+        <path d="M9 17h6" />
+        <circle cx="17" cy="17" r="2" />
+      </>
+    ),
+  };
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+      {paths[name]}
+    </svg>
+  );
 }
 
-function QueueSection({ title, count, tone, children }) {
-  const pill =
-    tone === "brass"
-      ? { background: "var(--brass)", color: "#fff" }
-      : tone === "green"
-      ? { background: "var(--green)", color: "#fff" }
-      : { background: "var(--bg-2)", color: "var(--slate2)", border: "1px solid var(--line)" };
+// kind: "incoming" | "active" | "scheduled" | "done"
+function VqCard({ r, kind, advance, setZoomedPhoto, user, firstName }) {
+  const v = r.vehicle || {};
+  const now = new Date();
+  const due = !r.scheduledFor || new Date(r.scheduledFor) <= now;
+  const makeModel = [v.make, v.model].filter(Boolean).join(" ");
+  const carLine = [makeModel, v.color].filter(Boolean).join(" · ");
+  const locParts = [v.section, v.location];
+  if (user?.role === "ADMIN" && v.building?.name) locParts.push(v.building.name);
+  const location = locParts.filter(Boolean).join(" · ");
+  const when =
+    kind === "done"
+      ? formatDateTime(r.completedAt || r.updatedAt)
+      : r.scheduledFor
+      ? formatDateTime(r.scheduledFor)
+      : timeAgo(r.createdAt);
+
+  const cls =
+    "vq-card" +
+    (kind === "incoming" ? " incoming" : "") +
+    (kind === "active" ? " accent-red" : "") +
+    (kind === "scheduled" ? " accent-gray" : "") +
+    (kind === "done" ? " done accent-gray" : "");
+
+  const statusChip =
+    r.status === "WAITING" ? (
+      <span className="vq-chip pending">Pending</span>
+    ) : r.status === "PULLING" ? (
+      <span className="vq-chip accepted">Accepted</span>
+    ) : r.status === "READY" ? (
+      <span className="vq-chip ready">Ready</span>
+    ) : null;
+
   return (
-    <section style={{ marginBottom: 26 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <span style={{ fontFamily: '"Oswald", sans-serif', fontSize: 15, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--ink)" }}>
-          {title}
-        </span>
-        <span style={{ ...pill, borderRadius: 20, padding: "1px 9px", fontSize: 12, fontWeight: 700, minWidth: 22, textAlign: "center" }}>{count}</span>
+    <div className={cls}>
+      <div className="vq-top">
+        {v.photoUrl ? (
+          <img className="vq-photo" src={v.photoUrl} alt="" onClick={() => setZoomedPhoto(v.photoUrl)} />
+        ) : (
+          <div className="vq-nophoto">
+            <VqIcon name="car" size={14} />
+            <span>No photo</span>
+          </div>
+        )}
+        <div style={{ minWidth: 0 }}>
+          <div className="vq-name">{firstName(r.requestedBy?.name || "")}</div>
+          {carLine && <div className="vq-car">{carLine}</div>}
+        </div>
       </div>
-      {children}
+
+      <div className="vq-meta">
+        <span className="vq-ticket">{v.ticketNumber}</span>
+        <VqIcon name="clock" size={13} />
+        <span>{when}</span>
+      </div>
+      {kind !== "done" && due && <div className="vq-meta">needs it ASAP</div>}
+      {location && (
+        <div className="vq-meta">
+          <VqIcon name="pin" size={13} />
+          <span>{location}</span>
+        </div>
+      )}
+
+      {kind !== "done" && (
+        <div className="vq-chips">
+          <span className={"vq-chip " + (due ? "immediate" : "future")}>{due ? "Immediate" : "Future"}</span>
+          {statusChip}
+          {r.type === "CHARGE" && <span className="vq-chip tag">⚡ Charging</span>}
+          {v.isVisitor && <span className="vq-chip tag">Visitor</span>}
+        </div>
+      )}
+
+      {kind === "incoming" && (
+        <div className="vq-actions">
+          <button className="vq-btn accept" onClick={() => advance(r.id, "PULLING")}>
+            <VqIcon name="check" size={16} /> Accept
+          </button>
+        </div>
+      )}
+      {kind === "active" && (
+        <div className="vq-actions">
+          <button
+            className="vq-btn undo"
+            title={r.status === "READY" ? "Back to accepted" : "Back to pending"}
+            aria-label="Undo last step"
+            onClick={() => advance(r.id, r.status === "READY" ? "PULLING" : "WAITING")}
+          >
+            <VqIcon name="undo" size={16} />
+          </button>
+          {r.status === "PULLING" ? (
+            <button className="vq-btn ready" onClick={() => advance(r.id, "READY")}>Ready</button>
+          ) : (
+            <button className="vq-btn complete" onClick={() => advance(r.id, "COMPLETED")}>
+              <VqIcon name="check" size={16} /> Complete
+            </button>
+          )}
+        </div>
+      )}
+      {kind === "scheduled" && (
+        <div className="vq-actions">
+          <button className="vq-btn move" onClick={() => advance(r.id, "PULLING")}>
+            <VqIcon name="up" size={15} /> Move to active
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VqColumn({ title, count, incoming, empty, children }) {
+  return (
+    <section className={"vq-col" + (incoming ? " incoming" : "")}>
+      <div className="vq-col-head">
+        <span className="vq-col-title">{title}</span>
+        <span className="vq-count">{count}</span>
+      </div>
+      <div className="vq-col-body">
+        {count === 0 && <div className="vq-empty">{empty}</div>}
+        {children}
+      </div>
     </section>
   );
 }
 
-function NewQueueView({ requests, advance, setZoomedPhoto, user, firstName, buildingName }) {
+function NewQueueView({ requests, advance, setZoomedPhoto, user, firstName }) {
   const now = new Date();
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   tomorrow.setHours(0, 0, 0, 0);
   const dayAfter = new Date(tomorrow);
   dayAfter.setDate(dayAfter.getDate() + 1);
-
   const isDue = (r) => !r.scheduledFor || new Date(r.scheduledFor) <= now;
 
-  // Incoming: pickup requests waiting to be accepted (due now)
-  const incoming = requests.filter((r) => r.status === "WAITING" && r.type === "PICKUP" && isDue(r));
-  // Charging requests waiting to be accepted
-  const chargingRequests = requests.filter((r) => r.status === "WAITING" && r.type === "CHARGE");
-  // Active: accepted (PULLING) or ready
+  // Incoming: anything waiting to be accepted that is due now (pickups and charging)
+  const incoming = requests.filter((r) => r.status === "WAITING" && (isDue(r) || r.type === "CHARGE"));
+  // Active: accepted or ready
   const active = requests.filter((r) => ["PULLING", "READY"].includes(r.status));
   // Recently completed (API sends the last 12 hours) — newest first, max 5
   const recentlyCompleted = requests
@@ -1334,184 +1477,48 @@ function NewQueueView({ requests, advance, setZoomedPhoto, user, firstName, buil
     .sort((a, b) => new Date(b.completedAt || b.updatedAt) - new Date(a.completedAt || a.updatedAt))
     .slice(0, 5);
   // Scheduled pickups not yet due
-  const scheduledWaiting = requests.filter((r) => r.status === "WAITING" && r.type === "PICKUP" && !isDue(r));
-  const laterToday = scheduledWaiting.filter((r) => new Date(r.scheduledFor) < tomorrow);
-  const tomorrowPickups = scheduledWaiting.filter((r) => isTomorrow(r.scheduledFor));
-  const futurePickups = scheduledWaiting.filter((r) => new Date(r.scheduledFor) >= dayAfter);
+  const scheduled = requests.filter((r) => r.status === "WAITING" && r.type !== "CHARGE" && !isDue(r));
+  const tomorrowPickups = scheduled.filter((r) => isTomorrow(r.scheduledFor));
+  // Future = later today plus anything after tomorrow, soonest first
+  const futurePickups = scheduled
+    .filter((r) => !isTomorrow(r.scheduledFor))
+    .sort((a, b) => new Date(a.scheduledFor) - new Date(b.scheduledFor));
 
-  function QueueCard({ r, action, completed }) {
-    const v = r.vehicle || {};
-    const makeModel = [v.make, v.model].filter(Boolean).join(" ");
-    const vehicleLine = [makeModel, v.color].filter(Boolean).join(" · ");
-    const locationParts = [v.section, v.location];
-    if (user?.role === "ADMIN" && v.building?.name) locationParts.push(v.building.name);
-    const locationLine = locationParts.filter(Boolean).join(" · ");
-    const due = isDue(r);
-    const when = completed
-      ? formatDateTime(r.completedAt || r.updatedAt)
-      : r.scheduledFor
-      ? formatDateTime(r.scheduledFor)
-      : timeAgo(r.createdAt);
-    const statusLabel = r.status === "WAITING" ? "Pending" : r.status === "PULLING" ? "Accepted" : "Ready";
-
-    return (
-      <div
-        style={{
-          background: completed ? "transparent" : "#fff",
-          border: "1px solid var(--line)",
-          borderLeft: action === "accept" ? "4px solid var(--brass)" : "1px solid var(--line)",
-          borderRadius: 12,
-          padding: "14px 16px",
-          marginBottom: 10,
-          display: "flex",
-          gap: 14,
-          alignItems: "flex-start",
-          opacity: completed ? 0.7 : 1,
-        }}
-      >
-        {v.photoUrl ? (
-          <img
-            src={v.photoUrl}
-            alt=""
-            onClick={() => setZoomedPhoto(v.photoUrl)}
-            style={{ width: 56, height: 56, borderRadius: 10, objectFit: "cover", flexShrink: 0, cursor: "pointer" }}
-          />
-        ) : (
-          <div
-            style={{
-              width: 56, height: 56, borderRadius: 10, background: "var(--bg-2)", border: "1px solid var(--line)",
-              flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 10, color: "var(--slate2)", textAlign: "center", lineHeight: 1.2, padding: 4,
-            }}
-          >
-            No photo
-          </div>
-        )}
-
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-            <span style={{ fontWeight: 700, fontSize: 16, color: "var(--ink)" }}>{firstName(r.requestedBy?.name || "")}</span>
-            {r.type === "CHARGE" && <QueueChip kind="Charging" label="⚡ Charging" />}
-            {v.isVisitor && <QueueChip kind="Visitor" />}
-          </div>
-          {vehicleLine && <div style={{ fontSize: 13, color: "var(--ink)", marginTop: 2 }}>{vehicleLine}</div>}
-          <div style={{ fontSize: 12, marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "baseline" }}>
-            <span style={{ fontFamily: '"Oswald", sans-serif', fontWeight: 600, letterSpacing: "0.04em", color: "var(--brass-light)" }}>{v.ticketNumber}</span>
-            <span style={{ color: "var(--slate2)" }}>{when}</span>
-          </div>
-          {!completed && due && (
-            <div style={{ fontSize: 12, color: "var(--red)", fontWeight: 600, marginTop: 2 }}>needs it ASAP</div>
-          )}
-          {locationLine && <div style={{ fontSize: 12, color: "var(--slate2)", marginTop: 2 }}>{locationLine}</div>}
-          {!completed && (
-            <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <QueueChip kind={due ? "Immediate" : "Future"} />
-              <QueueChip kind={statusLabel} />
-              {action && (
-              <div style={{ marginLeft: "auto" }}>
-                {action === "accept" && (
-                  <button className="mini-btn start" style={{ padding: "10px 16px", fontSize: 12 }} onClick={() => advance(r.id, "PULLING")}>Accept</button>
-                )}
-                {action === "ready" && (
-                  <button className="mini-btn ready" style={{ padding: "10px 16px", fontSize: 12 }} onClick={() => advance(r.id, "READY")}>Ready</button>
-                )}
-                {action === "complete" && (
-                  <button className="mini-btn done" style={{ padding: "10px 16px", fontSize: 12 }} onClick={() => advance(r.id, "COMPLETED")}>Complete</button>
-                )}
-                {action === "move" && (
-                  <button className="mini-btn start" style={{ padding: "10px 16px", fontSize: 12 }} onClick={() => advance(r.id, "PULLING")}>Move to active</button>
-                )}
-              </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  const nothingToShow =
-    incoming.length + chargingRequests.length + active.length + recentlyCompleted.length +
-      laterToday.length + tomorrowPickups.length + futurePickups.length === 0;
+  const cardProps = { advance, setZoomedPhoto, user, firstName };
 
   return (
     <>
-      <div style={{ marginBottom: 18 }}>
-        <h1 className="title" style={{ marginBottom: 4 }}>Valet Queue</h1>
+      <h1 className="title" style={{ marginBottom: 14 }}>Valet Queue</h1>
+
+      {incoming.length > 0 && (
+        <div className="vq-alert">
+          <span style={{ color: "#C62828", display: "inline-flex" }}><VqIcon name="bell" size={18} /></span>
+          <strong>
+            {incoming.length} request{incoming.length > 1 ? "s" : ""} awaiting acceptance
+          </strong>
+          <span>Accept to stop the alert.</span>
+        </div>
+      )}
+
+      <div className="vq-board">
+        <VqColumn title="Incoming" count={incoming.length} incoming empty="No new requests">
+          {incoming.map((r) => <VqCard key={r.id} r={r} kind="incoming" {...cardProps} />)}
+        </VqColumn>
+
+        <VqColumn title="Active queue" count={active.length} empty="No cars in progress">
+          {active.map((r) => <VqCard key={r.id} r={r} kind="active" {...cardProps} />)}
+          {recentlyCompleted.length > 0 && <div className="vq-sub">Recently completed</div>}
+          {recentlyCompleted.map((r) => <VqCard key={r.id} r={r} kind="done" {...cardProps} />)}
+        </VqColumn>
+
+        <VqColumn title="Tomorrow's pickups" count={tomorrowPickups.length} empty="Nothing scheduled">
+          {tomorrowPickups.map((r) => <VqCard key={r.id} r={r} kind="scheduled" {...cardProps} />)}
+        </VqColumn>
+
+        <VqColumn title="Future pickups" count={futurePickups.length} empty="Nothing scheduled">
+          {futurePickups.map((r) => <VqCard key={r.id} r={r} kind="scheduled" {...cardProps} />)}
+        </VqColumn>
       </div>
-
-      {incoming.length > 0 && (
-        <div
-          style={{
-            background: "rgba(201,162,39,0.14)", border: "1.5px solid var(--brass)", borderRadius: 12,
-            padding: "12px 16px", marginBottom: 22, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12,
-          }}
-        >
-          <div>
-            <div style={{ fontWeight: 700, color: "var(--ink)", fontSize: 14 }}>
-              {incoming.length} request{incoming.length > 1 ? "s" : ""} awaiting acceptance
-            </div>
-            <div style={{ fontSize: 12, color: "var(--slate2)", marginTop: 2 }}>Accept to stop the alert.</div>
-          </div>
-          <span style={{ fontFamily: '"Oswald", sans-serif', fontSize: 30, fontWeight: 600, color: "var(--brass-light)" }}>{incoming.length}</span>
-        </div>
-      )}
-
-      {incoming.length > 0 && (
-        <QueueSection title="Incoming" count={incoming.length} tone="brass">
-          {incoming.map((r) => <QueueCard key={r.id} r={r} action="accept" />)}
-        </QueueSection>
-      )}
-
-      {chargingRequests.length > 0 && (
-        <QueueSection title="⚡ Charging requests" count={chargingRequests.length} tone="brass">
-          {chargingRequests.map((r) => <QueueCard key={r.id} r={r} action="accept" />)}
-        </QueueSection>
-      )}
-
-      {(active.length > 0 || recentlyCompleted.length > 0) && (
-        <QueueSection title="Active queue" count={active.length} tone="green">
-          {active.map((r) => (
-            <QueueCard key={r.id} r={r} action={r.status === "PULLING" ? "ready" : "complete"} />
-          ))}
-          {active.length === 0 && (
-            <div style={{ fontSize: 13, color: "var(--slate2)", margin: "0 0 10px" }}>No cars in progress.</div>
-          )}
-          {recentlyCompleted.length > 0 && (
-            <>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--slate2)", textTransform: "uppercase", letterSpacing: "0.08em", margin: "16px 0 10px" }}>
-                Recently completed
-              </div>
-              {recentlyCompleted.map((r) => <QueueCard key={r.id} r={r} completed />)}
-            </>
-          )}
-        </QueueSection>
-      )}
-
-      {nothingToShow && (
-        <div className="empty-state">
-          <div className="big">Queue is clear</div>
-          All caught up — no pending pickups.
-        </div>
-      )}
-
-      {laterToday.length > 0 && (
-        <QueueSection title="Later today" count={laterToday.length}>
-          {laterToday.map((r) => <QueueCard key={r.id} r={r} action="move" />)}
-        </QueueSection>
-      )}
-
-      {tomorrowPickups.length > 0 && (
-        <QueueSection title="Tomorrow's pickups" count={tomorrowPickups.length}>
-          {tomorrowPickups.map((r) => <QueueCard key={r.id} r={r} action="move" />)}
-        </QueueSection>
-      )}
-
-      {futurePickups.length > 0 && (
-        <QueueSection title="Future pickups" count={futurePickups.length}>
-          {futurePickups.map((r) => <QueueCard key={r.id} r={r} action="move" />)}
-        </QueueSection>
-      )}
     </>
   );
 }
