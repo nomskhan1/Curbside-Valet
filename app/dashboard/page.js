@@ -1276,26 +1276,33 @@ function unlockAlertAudio() {
   } catch {}
 }
 
+// "Doorbell" alert: a warm two-note ding-dong (E5 then C5) built from bell partials.
+function alertBellTone(ctx, freq, start, dur, peak) {
+  // [frequency ratio, relative level, relative decay]
+  [[1, 1, 1], [2, 0.35, 0.6], [3, 0.12, 0.4], [4.2, 0.06, 0.3]].forEach(([ratio, level, decay]) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = freq * ratio;
+    const end = start + dur * decay;
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(peak * level, start + 0.003);
+    gain.gain.exponentialRampToValueAtTime(0.0001, end);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(start);
+    osc.stop(end + 0.02);
+  });
+}
+
 function playAlertSound() {
   try {
     const ctx = getAlertAudioCtx();
     if (!ctx) return;
     if (ctx.state === "suspended") ctx.resume().catch(() => {});
-    const t = ctx.currentTime;
-    // Two-tone "ding-ding": 880 Hz then 1320 Hz
-    [[0, 880], [0.22, 1320]].forEach(([offset, freq]) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "square";
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.0001, t + offset);
-      gain.gain.exponentialRampToValueAtTime(0.35, t + offset + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + offset + 0.18);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(t + offset);
-      osc.stop(t + offset + 0.2);
-    });
+    const t = ctx.currentTime + 0.03;
+    alertBellTone(ctx, 659.25, t, 1.1, 0.38); // ding
+    alertBellTone(ctx, 523.25, t + 0.42, 1.4, 0.38); // dong
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([200, 100, 200]);
   } catch {}
 }
