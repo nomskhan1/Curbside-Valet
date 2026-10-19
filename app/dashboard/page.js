@@ -1247,11 +1247,56 @@ function GuestView({ user }) {
 // ---------------- STAFF / ADMIN ----------------
 
 // Plays the notification alert MP3.
+// The alert beep is generated in code (Web Audio), so no sound file is needed.
+// Browsers only allow sound after the user has tapped the page once; the
+// StaffView unlock handler calls unlockAlertAudio() on that first tap.
+let alertAudioCtx = null;
+function getAlertAudioCtx() {
+  if (typeof window === "undefined") return null;
+  if (!alertAudioCtx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) alertAudioCtx = new AC();
+  }
+  return alertAudioCtx;
+}
+
+function unlockAlertAudio() {
+  try {
+    const ctx = getAlertAudioCtx();
+    if (!ctx) return;
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    // A silent blip inside the tap is what unlocks audio on iPhone.
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.02);
+  } catch {}
+}
+
 function playAlertSound() {
   try {
-    const audio = new Audio("/alert.mp3");
-    audio.volume = 1.0;
-    audio.play().catch(() => {});
+    const ctx = getAlertAudioCtx();
+    if (!ctx) return;
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    const t = ctx.currentTime;
+    // Two-tone "ding-ding": 880 Hz then 1320 Hz
+    [[0, 880], [0.22, 1320]].forEach(([offset, freq]) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "square";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, t + offset);
+      gain.gain.exponentialRampToValueAtTime(0.35, t + offset + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + offset + 0.18);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t + offset);
+      osc.stop(t + offset + 0.2);
+    });
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([200, 100, 200]);
   } catch {}
 }
 
@@ -1550,9 +1595,7 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
   useEffect(() => {
     if (alertsEnabled) return;
     function unlock() {
-      const audio = new Audio("/alert.mp3");
-      audio.volume = 0;
-      audio.play().then(() => audio.pause()).catch(() => {});
+      unlockAlertAudio();
       setAlertsEnabled(true);
       document.removeEventListener("click", unlock);
       document.removeEventListener("touchstart", unlock);
@@ -1597,6 +1640,18 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
 
   return (
     <>
+      {!alertsEnabled && (
+        <button
+          type="button"
+          style={{
+            display: "block", width: "100%", textAlign: "left", marginBottom: 14, padding: "10px 14px",
+            background: "#FFF4E5", border: "1px solid #F5C26B", borderRadius: 10, color: "#8A5A00",
+            fontFamily: "inherit", fontSize: 14, fontWeight: 600, cursor: "pointer",
+          }}
+        >
+          🔔 Sound alerts are off. Tap here to turn them on.
+        </button>
+      )}
       {user.role === "ADMIN" && (
         <div className="tabs">
           <button className={tab === "queue" ? "active" : ""} onClick={() => setTab("queue")}>
