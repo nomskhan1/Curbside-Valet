@@ -1438,9 +1438,6 @@ function NewQueueView({ requests, advance, setZoomedPhoto, user, firstName, buil
     <>
       <div style={{ marginBottom: 18 }}>
         <h1 className="title" style={{ marginBottom: 4 }}>Valet Queue</h1>
-        {buildingName && (
-          <div style={{ fontSize: 13, color: "var(--slate2)", letterSpacing: "0.04em" }}>{buildingName}</div>
-        )}
       </div>
 
       {incoming.length > 0 && (
