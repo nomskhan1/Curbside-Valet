@@ -5,13 +5,23 @@ async function GET(req) {
   const session = getSessionFromRequest(req);
   if (!session) return new Response(JSON.stringify({ error: "Not signed in." }), { status: 401 });
 
+  // Active requests, plus pickups completed in the last 12 hours so the
+  // queue can show a "Recently completed" list.
+  const recentSince = new Date(Date.now() - 12 * 60 * 60 * 1000);
+  const queueStatus = {
+    OR: [
+      { status: { in: ["WAITING", "PULLING", "READY"] } },
+      { status: "COMPLETED", completedAt: { gte: recentSince } },
+    ],
+  };
+
   let where;
   if (session.role === "GUEST") {
     where = { requestedById: session.id };
   } else if (session.role === "STAFF" || session.role === "MANAGER") {
     // Staff and managers only see the active queue for their own building.
     where = {
-      status: { in: ["WAITING", "PULLING", "READY"] },
+      ...queueStatus,
       vehicle: { buildingId: session.buildingId || "__none__" }, // no buildingId = sees nothing, not everything
     };
   } else {
@@ -22,7 +32,7 @@ async function GET(req) {
     });
     const buildingIds = adminBuildings.map(ab => ab.buildingId);
     where = {
-      status: { in: ["WAITING", "PULLING", "READY"] },
+      ...queueStatus,
       ...(buildingIds.length > 0 ? { vehicle: { buildingId: { in: buildingIds } } } : {}),
     };
   }
