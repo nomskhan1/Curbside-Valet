@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Privacy Policy - Integral Valet",
+  title: "Privacy Policy - Bring My Car",
 };
 
 export default function PrivacyPolicy() {
@@ -9,13 +9,13 @@ export default function PrivacyPolicy() {
       <p style={{ color: "#6B7280", fontSize: 14 }}>Last updated: January 2026</p>
 
       <p>
-        Integral Valet (the App) is a valet vehicle request system used by residents, staff,
+        Bring My Car (the App) is a valet vehicle request system used by residents, staff,
         and administrators of participating buildings. This policy explains what information the
         App collects and how it is used.
       </p>
 
       <h2>Information we collect</h2>
-      <p>When you use Integral Valet, we collect:</p>
+      <p>When you use Bring My Car, we collect:</p>
       <ul>
         <li>Your name and a username you choose</li>
         <li>A securely hashed password (we never store your actual password in readable form)</li>

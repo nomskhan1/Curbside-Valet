@@ -127,7 +127,7 @@ export default function Dashboard() {
         <div className="brand">
           <img src="/logo.png" alt="" className="logo" />
           <div>
-            <div className="mark">Integral Valet</div>
+            <div className="mark">Bring My Car</div>
             <span className="sub">{user.name} · {user.role}</span>
           </div>
         </div>

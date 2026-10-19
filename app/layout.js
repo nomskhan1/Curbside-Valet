@@ -2,10 +2,11 @@ import "./globals.css";
 import NativeAppDetector from "./NativeAppDetector";
 
 export const metadata = {
-  title: "Integral Valet",
+  title: "Bring My Car",
   description: "Request and manage valet vehicle pickups.",
   icons: {
-    icon: "/favicon.png",
+    icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
   },
 };
 

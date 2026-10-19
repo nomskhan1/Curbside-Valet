@@ -32,8 +32,7 @@ export default function LoginPage() {
       <header className="topbar">
         <div className="brand">
           <img src="/logo.png" alt="" className="logo" />
-          <span className="mark">Integral</span>
-          <span className="sub">Valet</span>
+          <span className="mark">Bring My Car</span>
         </div>
       </header>
       <main>

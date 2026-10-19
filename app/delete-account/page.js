@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Delete Your Account - Integral Valet",
+  title: "Delete Your Account - Bring My Car",
 };
 
 export default function DeleteAccount() {
@@ -8,7 +8,7 @@ export default function DeleteAccount() {
       <h1 style={{ fontFamily: "Oswald, sans-serif" }}>Delete Your Account</h1>
 
       <p>
-        If you would like your Integral Valet account and associated data deleted, you can
+        If you would like your Bring My Car account and associated data deleted, you can
         request this in either of the following ways:
       </p>
 
