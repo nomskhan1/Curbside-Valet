@@ -936,9 +936,16 @@ function GuestView({ user }) {
 
   // Pickup and charging requests are independent of each other — a guest
   // can have both active at once, so they're tracked separately.
-  const activeRequest = requests.find(
-    (r) => r.type !== "CHARGE" && ["WAITING", "PULLING", "READY"].includes(r.status)
-  );
+  const isActive = (r) => ["WAITING", "PULLING", "READY"].includes(r.status);
+  const isUpcoming = (r) =>
+    r.status === "WAITING" && r.scheduledFor && new Date(r.scheduledFor) > new Date();
+  // The pickup happening now (waiting to be accepted, or on its way). Pickups
+  // scheduled for later are listed separately and don't stop the resident
+  // from asking for the car right now.
+  const activeRequest = requests.find((r) => r.type !== "CHARGE" && isActive(r) && !isUpcoming(r));
+  const upcomingRequests = requests
+    .filter((r) => r.type !== "CHARGE" && isUpcoming(r))
+    .sort((a, b) => new Date(a.scheduledFor) - new Date(b.scheduledFor));
   const activeChargeRequests = requests.filter(
     (r) => r.type === "CHARGE" && ["WAITING", "PULLING", "READY"].includes(r.status)
   );
@@ -946,25 +953,28 @@ function GuestView({ user }) {
   // Fire a one-time reminder (OS notification if available, always the
   // in-app banner below) once a scheduled pickup is within 10 minutes.
   useEffect(() => {
-    if (!activeRequest || !activeRequest.scheduledFor) return;
-    const msUntil = new Date(activeRequest.scheduledFor).getTime() - Date.now();
-    const withinTenMinutes = msUntil > 0 && msUntil <= 10 * 60 * 1000;
-    if (withinTenMinutes && !remindedRequestIds.current.has(activeRequest.id)) {
-      remindedRequestIds.current.add(activeRequest.id);
-      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-        try {
-          new Notification("Pickup coming up", {
-            body: `Ticket #${activeRequest.vehicle.ticketNumber} is scheduled in about 10 minutes.`,
-          });
-        } catch {}
+    for (const r of requests) {
+      if (r.type === "CHARGE" || !isUpcoming(r)) continue;
+      const msUntil = new Date(r.scheduledFor).getTime() - Date.now();
+      const withinTenMinutes = msUntil > 0 && msUntil <= 10 * 60 * 1000;
+      if (withinTenMinutes && !remindedRequestIds.current.has(r.id)) {
+        remindedRequestIds.current.add(r.id);
+        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+          try {
+            new Notification("Pickup coming up", {
+              body: `Ticket #${r.vehicle.ticketNumber} is scheduled in about 10 minutes.`,
+            });
+          } catch {}
+        }
       }
     }
-  }, [activeRequest, requests]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requests]);
 
-  const minutesUntilScheduled =
-    activeRequest && activeRequest.scheduledFor
-      ? Math.round((new Date(activeRequest.scheduledFor).getTime() - Date.now()) / 60000)
-      : null;
+  const nextUpcoming = upcomingRequests[0] || null;
+  const minutesUntilScheduled = nextUpcoming
+    ? Math.round((new Date(nextUpcoming.scheduledFor).getTime() - Date.now()) / 60000)
+    : null;
   const showReminderBanner =
     minutesUntilScheduled !== null && minutesUntilScheduled > 0 && minutesUntilScheduled <= 10;
 
@@ -1047,29 +1057,11 @@ function GuestView({ user }) {
 
   let pickupSection;
   if (activeRequest) {
-    const isFuture = activeRequest.scheduledFor && new Date(activeRequest.scheduledFor) > new Date();
     pickupSection = (
       <>
         <div className="hero-line">Ticket received</div>
-        <h1 className="title">{isFuture ? "Pickup scheduled" : "We're on it"}</h1>
-        {isFuture && showReminderBanner && (
-          <div
-            style={{
-              background: "rgba(124,106,216,0.12)",
-              border: "1px solid #7C6AD8",
-              color: "#7C6AD8",
-              borderRadius: 8,
-              padding: "10px 14px",
-              fontSize: 13,
-              marginBottom: 16,
-              fontWeight: 600,
-            }}
-          >
-            ⏰ Coming up in about {minutesUntilScheduled} minute{minutesUntilScheduled === 1 ? "" : "s"} —
-            have your car ready.
-          </div>
-        )}
-        <div className="stub" style={isFuture ? { borderColor: "#7C6AD8" } : undefined}>
+        <h1 className="title">We&apos;re on it</h1>
+        <div className="stub">
           <div className="stub-top">
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               {activeRequest.vehicle.photoUrl && (
@@ -1085,36 +1077,20 @@ function GuestView({ user }) {
                 <div className="stub-num">{activeRequest.vehicle.ticketNumber}</div>
               </div>
             </div>
-            <span
-              className={`status-pill status-${activeRequest.status}`}
-              style={
-                isFuture
-                  ? { background: "rgba(124,106,216,0.12)", borderColor: "#7C6AD8", color: "#7C6AD8" }
-                  : undefined
-              }
-            >
-              <span className="dot" style={isFuture ? { background: "#7C6AD8" } : undefined}></span>
-              {isFuture ? "Scheduled" : STATUS_LABEL[activeRequest.status]}
+            <span className={`status-pill status-${activeRequest.status}`}>
+              <span className="dot"></span>
+              {STATUS_LABEL[activeRequest.status]}
             </span>
           </div>
           <div className="stub-divider"></div>
           <div className="stub-row">
             <span>Vehicle</span>
-            <span>
-              {vehicleLabel(activeRequest.vehicle)}
-            </span>
+            <span>{vehicleLabel(activeRequest.vehicle)}</span>
           </div>
-          {isFuture ? (
-            <div className="stub-row">
-              <span>Scheduled for</span>
-              <span>{new Date(activeRequest.scheduledFor).toLocaleString()}</span>
-            </div>
-          ) : (
-            <div className="stub-row">
-              <span>Requested</span>
-              <span>{new Date(activeRequest.createdAt).toLocaleTimeString()}</span>
-            </div>
-          )}
+          <div className="stub-row">
+            <span>Requested</span>
+            <span>{new Date(activeRequest.createdAt).toLocaleTimeString()}</span>
+          </div>
         </div>
         {activeRequest.status === "WAITING" && (
           <button className="btn btn-ghost" onClick={() => cancel(activeRequest.id)}>
@@ -1126,6 +1102,14 @@ function GuestView({ user }) {
   } else {
     pickupSection = (
       <>
+      {upcomingRequests.length > 0 && (
+        <>
+          <div className="hero-line">Need it sooner?</div>
+          <h1 className="title" style={{ fontSize: 22 }}>
+            Request your car now
+          </h1>
+        </>
+      )}
       {vehicles.filter((v) => !v.isVisitor).length === 0 && (
         <div className="empty-state">
           <div className="big">No vehicles yet</div>
@@ -1185,6 +1169,73 @@ function GuestView({ user }) {
       </>
     );
   }
+
+  const scheduledSection = upcomingRequests.length > 0 && (
+    <>
+      <div className="hero-line">Coming up</div>
+      <h1 className="title" style={{ fontSize: 22 }}>
+        {upcomingRequests.length === 1 ? "Scheduled pickup" : "Scheduled pickups"}
+      </h1>
+      {showReminderBanner && (
+        <div
+          style={{
+            background: "rgba(124,106,216,0.12)",
+            border: "1px solid #7C6AD8",
+            color: "#7C6AD8",
+            borderRadius: 8,
+            padding: "10px 14px",
+            fontSize: 13,
+            marginBottom: 16,
+            fontWeight: 600,
+          }}
+        >
+          ⏰ Ticket #{nextUpcoming.vehicle.ticketNumber} is coming up in about {minutesUntilScheduled} minute
+          {minutesUntilScheduled === 1 ? "" : "s"} — have your car ready.
+        </div>
+      )}
+      {upcomingRequests.map((r) => (
+        <div key={r.id} className="stub" style={{ borderColor: "#7C6AD8", marginBottom: 12 }}>
+          <div className="stub-top">
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {r.vehicle.photoUrl && (
+                <img
+                  src={r.vehicle.photoUrl}
+                  alt=""
+                  onClick={() => setZoomedPhoto(r.vehicle.photoUrl)}
+                  style={{ width: 52, height: 52, borderRadius: 8, objectFit: "cover", cursor: "pointer" }}
+                />
+              )}
+              <div>
+                <div className="stub-num-label">Ticket</div>
+                <div className="stub-num" style={{ fontSize: 28 }}>
+                  {r.vehicle.ticketNumber}
+                </div>
+              </div>
+            </div>
+            <span
+              className="status-pill"
+              style={{ background: "rgba(124,106,216,0.12)", borderColor: "#7C6AD8", color: "#7C6AD8" }}
+            >
+              <span className="dot" style={{ background: "#7C6AD8" }}></span>
+              Scheduled
+            </span>
+          </div>
+          <div className="stub-divider"></div>
+          <div className="stub-row">
+            <span>Vehicle</span>
+            <span>{vehicleLabel(r.vehicle)}</span>
+          </div>
+          <div className="stub-row">
+            <span>Scheduled for</span>
+            <span>{new Date(r.scheduledFor).toLocaleString()}</span>
+          </div>
+          <button className="btn btn-ghost" style={{ marginTop: 10 }} onClick={() => cancel(r.id)}>
+            Cancel scheduled pickup
+          </button>
+        </div>
+      ))}
+    </>
+  );
 
   const visitorRequestSection = (
     <>
@@ -1305,7 +1356,27 @@ function GuestView({ user }) {
   return (
     <>
       {error && <div className="error-box">{error}</div>}
-      {pickupSection}
+      {activeRequest ? (
+        <>
+          {pickupSection}
+          {scheduledSection && (
+            <>
+              <div className="stub-divider" style={{ margin: "22px 0" }}></div>
+              {scheduledSection}
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          {scheduledSection && (
+            <>
+              {scheduledSection}
+              <div className="stub-divider" style={{ margin: "22px 0" }}></div>
+            </>
+          )}
+          {pickupSection}
+        </>
+      )}
       {visitorRequestSection}
       {(user.building?.hasEvCharging ?? true) && chargeSection}
 

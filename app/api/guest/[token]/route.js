@@ -3,6 +3,21 @@ const prisma = require("../../../../lib/db");
 // Public — no session required. The claimToken itself is the credential,
 // same as handing a physical valet stub to staff.
 
+// A request that's happening now: being brought out, or waiting to be
+// accepted and already due. Pickups scheduled for later don't count, so they
+// don't block asking for the car right now.
+function currentPickupWhere(vehicleId) {
+  return {
+    vehicleId,
+    type: "PICKUP",
+    OR: [
+      { status: { in: ["PULLING", "READY"] } },
+      { status: "WAITING", scheduledFor: null },
+      { status: "WAITING", scheduledFor: { lte: new Date() } },
+    ],
+  };
+}
+
 async function GET(req, { params }) {
   const { token } = params;
   if (!token) {
@@ -22,11 +37,7 @@ async function GET(req, { params }) {
 
   // Is there already an active request for this vehicle?
   const activeRequest = await prisma.request.findFirst({
-    where: {
-      vehicleId: vehicle.id,
-      type: "PICKUP",
-      status: { in: ["WAITING", "PULLING", "READY"] },
-    },
+    where: currentPickupWhere(vehicle.id),
     orderBy: { createdAt: "desc" },
   });
 
@@ -61,13 +72,7 @@ async function POST(req, { params }) {
     });
   }
 
-  const activeExisting = await prisma.request.findFirst({
-    where: {
-      vehicleId: vehicle.id,
-      type: "PICKUP",
-      status: { in: ["WAITING", "PULLING", "READY"] },
-    },
-  });
+  const activeExisting = await prisma.request.findFirst({ where: currentPickupWhere(vehicle.id) });
   if (activeExisting) {
     return new Response(
       JSON.stringify({ error: "This car has already been requested — sit tight!" }),

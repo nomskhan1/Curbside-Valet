@@ -146,28 +146,6 @@ async function POST(req) {
     );
   }
 
-  // Avoid duplicate active requests of the SAME type for the same vehicle.
-  // A pickup and a charge request can both be active at once — they're
-  // independent of each other.
-  const activeExisting = await prisma.request.findFirst({
-    where: {
-      vehicleId: vehicle.id,
-      type: requestType,
-      status: { in: ["WAITING", "PULLING", "READY"] },
-    },
-  });
-  if (activeExisting) {
-    return new Response(
-      JSON.stringify({
-        error:
-          requestType === "CHARGE"
-            ? "There's already an active charging request for this car."
-            : "There's already an active pickup request for this car.",
-      }),
-      { status: 409 }
-    );
-  }
-
   let scheduledForDate = null;
   if (scheduledFor) {
     scheduledForDate = new Date(scheduledFor);
@@ -179,6 +157,35 @@ async function POST(req) {
         status: 400,
       });
     }
+  }
+
+  // Avoid duplicate requests of the SAME type for the same vehicle. A pickup
+  // and a charge request are independent of each other. A pickup scheduled
+  // for later doesn't block asking for the car right now (and the scheduled
+  // one is kept), but a car can only have one request for right now and one
+  // scheduled pickup at a time.
+  const now = new Date();
+  const isUpcoming = (r) => r.status === "WAITING" && r.scheduledFor && r.scheduledFor > now;
+  const wantsLater = !!scheduledForDate && scheduledForDate > now;
+  const activeSameType = await prisma.request.findMany({
+    where: {
+      vehicleId: vehicle.id,
+      type: requestType,
+      status: { in: ["WAITING", "PULLING", "READY"] },
+    },
+    select: { status: true, scheduledFor: true },
+  });
+  const conflict = activeSameType.find((r) => (wantsLater ? isUpcoming(r) : !isUpcoming(r)));
+  if (conflict) {
+    let error;
+    if (wantsLater) {
+      error = "This car already has a scheduled pickup. Cancel it first to choose a new time.";
+    } else if (requestType === "CHARGE") {
+      error = "There's already an active charging request for this car.";
+    } else {
+      error = "There's already an active pickup request for this car.";
+    }
+    return new Response(JSON.stringify({ error }), { status: 409 });
   }
 
   const request = await prisma.request.create({
