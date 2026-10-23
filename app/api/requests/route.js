@@ -1,5 +1,5 @@
 const prisma = require("../../../lib/db");
-const { getSessionFromRequest } = require("../../../lib/auth");
+const { getSessionFromRequest, renewSessionIfNeeded } = require("../../../lib/auth");
 
 async function GET(req) {
   const session = getSessionFromRequest(req);
@@ -46,7 +46,13 @@ async function GET(req) {
     orderBy: [{ scheduledFor: "asc" }, { createdAt: "asc" }],
   });
 
-  return new Response(JSON.stringify(requests), { status: 200 });
+  // Screens poll this every few seconds, so it's also where sessions get
+  // renewed — an always-on staff screen never signs itself out.
+  const renewed = await renewSessionIfNeeded(session, prisma);
+  return new Response(JSON.stringify(requests), {
+    status: 200,
+    headers: renewed ? { "Set-Cookie": renewed } : {},
+  });
 }
 
 async function POST(req) {
@@ -57,28 +63,44 @@ async function POST(req) {
   const { vehicleId, ticketNumber, etaMinutes, scheduledFor, type } = body || {};
   const requestType = type === "CHARGE" ? "CHARGE" : "PICKUP";
 
-  if (!vehicleId && !ticketNumber) {
+  if (!vehicleId && !(ticketNumber && String(ticketNumber).trim())) {
     return new Response(JSON.stringify({ error: "vehicleId or ticketNumber is required." }), {
       status: 400,
     });
   }
 
   let vehicle;
+  const ticket = ticketNumber ? String(ticketNumber).trim() : "";
+  // Ticket numbers are unique per building, so a ticket lookup is always
+  // scoped to a building: the requester's own building, or for an admin
+  // without one, the building sent with the request.
+  const ticketBuildingId = session.buildingId || body.buildingId || null;
   if (vehicleId) {
     vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
+  } else if (ticketBuildingId) {
+    vehicle = await prisma.vehicle.findFirst({
+      where: { ticketNumber: ticket, buildingId: ticketBuildingId },
+    });
   } else {
-    vehicle = await prisma.vehicle.findUnique({ where: { ticketNumber: ticketNumber.trim() } });
+    const matches = await prisma.vehicle.findMany({ where: { ticketNumber: ticket }, take: 2 });
+    if (matches.length > 1) {
+      return new Response(
+        JSON.stringify({ error: "That ticket number is used in more than one building. Please choose the building first." }),
+        { status: 409 }
+      );
+    }
+    vehicle = matches[0] || null;
   }
 
   // Ticket number with no matching vehicle yet — this is a resident
   // requesting pickup or charging for a visitor's car that's never been
   // entered into the system before. Just the ticket number is enough.
-  if (!vehicle && ticketNumber) {
+  if (!vehicle && ticket) {
     vehicle = await prisma.vehicle.create({
       data: {
-        ticketNumber: ticketNumber.trim(),
+        ticketNumber: ticket,
         ownerId: session.id,
-        buildingId: session.buildingId || null,
+        buildingId: ticketBuildingId,
         isVisitor: true,
       },
     });

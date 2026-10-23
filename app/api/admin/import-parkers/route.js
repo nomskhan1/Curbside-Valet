@@ -75,8 +75,14 @@ async function POST(req) {
   // Load existing usernames to avoid duplicates
   const existingUsers = await prisma.user.findMany({ select: { username: true } });
   const existingUsernames = new Set(existingUsers.map((u) => u.username));
+  // Ticket/decal numbers only need to be unique within this building.
   const existingDecals = new Set(
-    (await prisma.vehicle.findMany({ select: { ticketNumber: true } })).map((v) => v.ticketNumber)
+    (
+      await prisma.vehicle.findMany({
+        where: { buildingId: targetBuildingId },
+        select: { ticketNumber: true },
+      })
+    ).map((v) => v.ticketNumber)
   );
 
   const results = [];
@@ -108,6 +114,9 @@ async function POST(req) {
           passwordHash,
           role: "GUEST",
           buildingId: targetBuildingId,
+          // The starting password is the unit number (or a short random
+          // code), so residents must pick their own on first sign-in.
+          mustChangePassword: true,
         },
       });
 

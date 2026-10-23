@@ -1,5 +1,5 @@
 const prisma = require("../../../../lib/db");
-const { getSessionFromRequest } = require("../../../../lib/auth");
+const { getSessionFromRequest, renewSessionIfNeeded, clearCookieHeader } = require("../../../../lib/auth");
 
 async function GET(req) {
   const session = getSessionFromRequest(req);
@@ -37,7 +37,16 @@ async function GET(req) {
       },
     });
 
+    // The account was deleted: sign this device out.
+    if (!dbUser) {
+      return new Response(JSON.stringify({ user: null }), {
+        status: 200,
+        headers: { "Set-Cookie": clearCookieHeader() },
+      });
+    }
+
     // Build list of all building IDs this admin is assigned to
+    const renewed = await renewSessionIfNeeded(session, prisma);
     const adminBuildingIds = dbUser?.adminBuildings?.map(ab => ab.buildingId) || [];
 
     return new Response(JSON.stringify({
@@ -48,7 +57,7 @@ async function GET(req) {
         adminBuildings: dbUser?.adminBuildings || [],
         adminBuildingIds,
       }
-    }), { status: 200 });
+    }), { status: 200, headers: renewed ? { "Set-Cookie": renewed } : {} });
   } catch {
     return new Response(JSON.stringify({ user: session }), { status: 200 });
   }

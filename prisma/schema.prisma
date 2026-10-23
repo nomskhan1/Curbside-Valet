@@ -1,4 +1,4 @@
-// Prisma schema for Curbside Valet
+// Prisma schema for Bring My Car
 generator client {
   provider = "prisma-client-js"
 }
@@ -48,11 +48,18 @@ model User {
   unitNumber         String?
   mustChangePassword Boolean @default(false)
 
+  // Sign-in protection: after 5 wrong passwords the account is locked
+  // for 15 minutes.
+  failedLogins Int       @default(0)
+  lockedUntil  DateTime?
+
   vehicles        Vehicle[]
   requests        Request[] @relation("RequestedBy")
   handledRequests Request[] @relation("HandledBy")
   washLogs        WashLog[]
   adminBuildings  AdminBuilding[]
+
+  @@index([buildingId])
 }
 
 model Vehicle {
@@ -61,7 +68,7 @@ model Vehicle {
   model        String?
   color        String?
   licensePlate String?
-  ticketNumber String   @unique
+  ticketNumber String
   ownerId      String
   owner        User     @relation(fields: [ownerId], references: [id])
   createdAt    DateTime @default(now())
@@ -77,6 +84,11 @@ model Vehicle {
 
   requests  Request[]
   washLogs  WashLog[]
+
+  // Ticket numbers only need to be unique within a building, so two
+  // garages can both use ticket #1042.
+  @@unique([buildingId, ticketNumber])
+  @@index([ownerId])
 }
 
 model WashLog {
@@ -107,4 +119,10 @@ model Request {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   completedAt   DateTime?
+
+  // Speeds up the live queue, duplicate-request checks and history.
+  @@index([status, completedAt])
+  @@index([vehicleId, status])
+  @@index([requestedById])
+  @@index([createdAt])
 }

@@ -10,6 +10,83 @@ function guestUrl(vehicle) {
   return `${typeof window !== "undefined" ? window.location.origin : ""}/guest/${vehicle.claimToken}`;
 }
 
+// How often screens check for new requests. Phones and residents pause
+// completely while the app is in the background; staff screens keep checking
+// (more slowly) so the garage monitor still rings if another window covers it.
+const POLL_VISIBLE_MS = 5000;
+const POLL_STAFF_HIDDEN_MS = 15000;
+
+// Runs `fn` now and then every `visibleMs` while the page is on screen, and
+// every `hiddenMs` while it's hidden (null = pause while hidden). Never runs
+// two checks at once, and checks right away when the page comes back on
+// screen or the internet connection returns.
+function usePolling(fn, visibleMs, hiddenMs, onResume) {
+  const fnRef = useRef(fn);
+  const resumeRef = useRef(onResume);
+  useEffect(() => {
+    fnRef.current = fn;
+    resumeRef.current = onResume;
+  }, [fn, onResume]);
+
+  useEffect(() => {
+    let timer = null;
+    let stopped = false;
+    let running = false;
+    const isHidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
+
+    const schedule = () => {
+      clearTimeout(timer);
+      if (stopped) return;
+      const delay = isHidden() ? hiddenMs : visibleMs;
+      if (delay == null) return;
+      timer = setTimeout(tick, delay);
+    };
+    const tick = async () => {
+      if (stopped) return;
+      if (!running) {
+        running = true;
+        try {
+          await fnRef.current();
+        } catch {
+          // Network hiccup: try again on the next tick.
+        } finally {
+          running = false;
+        }
+      }
+      schedule();
+    };
+    const wake = () => {
+      if (isHidden()) {
+        schedule();
+        return;
+      }
+      if (resumeRef.current) Promise.resolve(resumeRef.current()).catch(() => {});
+      clearTimeout(timer);
+      tick();
+    };
+
+    tick();
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("online", wake);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("online", wake);
+    };
+  }, [visibleMs, hiddenMs]);
+}
+
+// Signed out (session expired or account removed): go to the sign-in page
+// instead of leaving a frozen screen.
+function signedOut(res) {
+  if (res.status === 401) {
+    if (typeof window !== "undefined") window.location.replace("/login");
+    return true;
+  }
+  return false;
+}
+
 const STATUS_LABEL = {
   WAITING: "Waiting in queue",
   PULLING: "Being pulled around",
@@ -831,17 +908,31 @@ function GuestView({ user }) {
     }
   }, []);
 
-  const load = useCallback(async () => {
-    const [vRes, rRes] = await Promise.all([fetch("/api/vehicles"), fetch("/api/requests")]);
-    setVehicles(await vRes.json());
-    setRequests(await rRes.json());
+  const loadVehicles = useCallback(async () => {
+    const res = await fetch("/api/vehicles");
+    if (signedOut(res)) return;
+    const data = await res.json();
+    if (Array.isArray(data)) setVehicles(data);
   }, []);
 
+  const loadRequests = useCallback(async () => {
+    const res = await fetch("/api/requests");
+    if (signedOut(res)) return;
+    const data = await res.json();
+    if (Array.isArray(data)) setRequests(data);
+  }, []);
+
+  // Full refresh, used after the guest does something (request, cancel, ...).
+  const load = useCallback(async () => {
+    await Promise.all([loadVehicles(), loadRequests()]);
+  }, [loadVehicles, loadRequests]);
+
+  // The car list rarely changes, so it's loaded once and again whenever the
+  // app comes back on screen; only the requests are checked every few seconds.
   useEffect(() => {
-    load();
-    const id = setInterval(load, 3000);
-    return () => clearInterval(id);
-  }, [load]);
+    loadVehicles().catch(() => {});
+  }, [loadVehicles]);
+  usePolling(loadRequests, POLL_VISIBLE_MS, null, loadVehicles);
 
   // Pickup and charging requests are independent of each other — a guest
   // can have both active at once, so they're tracked separately.
@@ -1583,14 +1674,12 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
 
   const load = useCallback(async () => {
     const res = await fetch("/api/requests");
-    setRequests(await res.json());
+    if (signedOut(res)) return;
+    const data = await res.json();
+    if (Array.isArray(data)) setRequests(data);
   }, []);
 
-  useEffect(() => {
-    load();
-    const id = setInterval(load, 3000);
-    return () => clearInterval(id);
-  }, [load]);
+  usePolling(load, POLL_VISIBLE_MS, POLL_STAFF_HIDDEN_MS);
 
   const waitingCount = requests.filter(
     (r) => r.status === "WAITING" && (!r.scheduledFor || new Date(r.scheduledFor) <= new Date())

@@ -43,7 +43,8 @@ async function POST(req, { params }) {
   const newHash = await bcrypt.hash(newPassword, 10);
   await prisma.user.update({
     where: { id },
-    data: { passwordHash: newHash },
+    // A reset also unlocks an account that was locked after wrong passwords.
+    data: { passwordHash: newHash, failedLogins: 0, lockedUntil: null },
   });
 
   return new Response(JSON.stringify({ ok: true }), { status: 200 });

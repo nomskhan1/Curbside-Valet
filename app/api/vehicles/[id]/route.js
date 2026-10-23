@@ -97,9 +97,11 @@ async function PATCH(req, { params }) {
   }
 
   if (ticketNumber && ticketNumber !== vehicle.ticketNumber) {
-    const existing = await prisma.vehicle.findUnique({ where: { ticketNumber } });
+    const existing = await prisma.vehicle.findFirst({
+      where: { ticketNumber, buildingId: vehicle.buildingId || null, NOT: { id } },
+    });
     if (existing) {
-      return new Response(JSON.stringify({ error: "That ticket number is already in use." }), {
+      return new Response(JSON.stringify({ error: "That ticket number is already in use at this building." }), {
         status: 409,
       });
     }

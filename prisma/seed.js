@@ -56,19 +56,22 @@ async function main() {
     },
   });
 
-  await prisma.vehicle.upsert({
-    where: { ticketNumber: "042" },
-    update: { buildingId: building.id },
-    create: {
-      make: "Audi",
-      model: "Q5",
-      color: "Black",
-      licensePlate: "8XJ-201",
-      ticketNumber: "042",
-      ownerId: guest.id,
-      buildingId: building.id,
-    },
+  const existingCar = await prisma.vehicle.findFirst({
+    where: { ticketNumber: "042", buildingId: building.id },
   });
+  if (!existingCar) {
+    await prisma.vehicle.create({
+      data: {
+        make: "Audi",
+        model: "Q5",
+        color: "Black",
+        licensePlate: "8XJ-201",
+        ticketNumber: "042",
+        ownerId: guest.id,
+        buildingId: building.id,
+      },
+    });
+  }
 
   console.log("Seeded:");
   console.log("  Building -> " + building.name);

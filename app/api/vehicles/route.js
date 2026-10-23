@@ -77,9 +77,12 @@ async function POST(req) {
     );
   }
 
-  const existing = await prisma.vehicle.findUnique({ where: { ticketNumber } });
+  // Ticket numbers only need to be unique within the owner's building.
+  const existing = await prisma.vehicle.findFirst({
+    where: { ticketNumber, buildingId: owner.buildingId || null },
+  });
   if (existing) {
-    return new Response(JSON.stringify({ error: "That ticket number is already in use." }), {
+    return new Response(JSON.stringify({ error: "That ticket number is already in use at this building." }), {
       status: 409,
     });
   }
