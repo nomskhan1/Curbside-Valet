@@ -74,4 +74,30 @@ async function POST(req) {
   return new Response(JSON.stringify({ logoUrl: building.logoUrl }), { status: 200 });
 }
 
-module.exports = { GET, POST };
+// DELETE: removes the logo for the current user's own building, so the header
+// goes back to showing only the Bring My Car logo. Admin and Manager only.
+// The image file itself is left in storage; only the building's link to it
+// is cleared.
+async function DELETE(req) {
+  const session = getSessionFromRequest(req);
+  if (!session || (session.role !== "ADMIN" && session.role !== "MANAGER")) {
+    return new Response(JSON.stringify({ error: "Admin or manager access required." }), {
+      status: 403,
+    });
+  }
+  if (!session.buildingId) {
+    return new Response(
+      JSON.stringify({ error: "Your account isn't assigned to a building yet." }),
+      { status: 400 }
+    );
+  }
+
+  await prisma.building.update({
+    where: { id: session.buildingId },
+    data: { logoUrl: null },
+  });
+
+  return new Response(JSON.stringify({ logoUrl: null }), { status: 200 });
+}
+
+module.exports = { GET, POST, DELETE };

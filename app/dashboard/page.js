@@ -3466,6 +3466,8 @@ function BrandingView({ onLogoUpdated }) {
   const [buildingName, setBuildingName] = useState(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const [error, setError] = useState("");
   const fileInputRef = useRef(null);
 
@@ -3502,6 +3504,26 @@ function BrandingView({ onLogoUpdated }) {
       setError("Couldn't process that image. Try a different photo.");
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function removeLogo() {
+    setError("");
+    setRemoving(true);
+    try {
+      const res = await fetch("/api/branding", { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || "Couldn't remove the logo. Try again.");
+        return;
+      }
+      setLogoUrl(null);
+      setConfirmRemove(false);
+      if (onLogoUpdated) onLogoUpdated(null);
+    } catch {
+      setError("Couldn't remove the logo. Check your connection and try again.");
+    } finally {
+      setRemoving(false);
     }
   }
 
@@ -3545,6 +3567,41 @@ function BrandingView({ onLogoUpdated }) {
                 onChange={handleSelect}
                 style={{ display: "none" }}
               />
+              {logoUrl && !confirmRemove && (
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => setConfirmRemove(true)}
+                  disabled={uploading || removing}
+                >
+                  Remove logo
+                </button>
+              )}
+              {logoUrl && confirmRemove && (
+                <div
+                  style={{
+                    border: "1px solid #F5C26B",
+                    background: "#FFF4E5",
+                    borderRadius: 10,
+                    padding: "12px 14px",
+                    marginTop: 12,
+                  }}
+                >
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "#8A5A00", marginBottom: 10 }}>
+                    Remove this logo? Everyone at {buildingName} will see just the Bring My Car logo
+                    in the header.
+                  </div>
+                  <button className="btn btn-primary" onClick={removeLogo} disabled={removing}>
+                    {removing ? "Removing…" : "Yes, remove logo"}
+                  </button>
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => setConfirmRemove(false)}
+                    disabled={removing}
+                  >
+                    Keep logo
+                  </button>
+                </div>
+              )}
             </>
           )}
         </>
