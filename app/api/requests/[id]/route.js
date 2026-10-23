@@ -37,10 +37,17 @@ async function PATCH(req, { params }) {
     });
   }
 
-  // Guests may only cancel their own request. Staff/admin can set any status.
+  // Guests may only cancel their own request, and only while it's still open
+  // (waiting, being brought out, or ready at the curb). Staff/admin can set
+  // any status.
   if (status === "CANCELLED") {
     if (!isOwner && !isStaff) {
       return new Response(JSON.stringify({ error: "Not allowed." }), { status: 403 });
+    }
+    if (!isStaff && !["WAITING", "PULLING", "READY"].includes(existing.status)) {
+      return new Response(JSON.stringify({ error: "This request is already finished." }), {
+        status: 409,
+      });
     }
   } else if (!isStaff) {
     return new Response(JSON.stringify({ error: "Only staff can update pickup status." }), {

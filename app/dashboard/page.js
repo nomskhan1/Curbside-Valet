@@ -898,6 +898,9 @@ function GuestView({ user }) {
   const [showChargeForm, setShowChargeForm] = useState(false);
   const [zoomedPhoto, setZoomedPhoto] = useState(null);
   const remindedRequestIds = useRef(new Set());
+  // Request the resident tapped Cancel on after a valet accepted it — asks
+  // "are you sure?" before cancelling.
+  const [confirmCancelId, setConfirmCancelId] = useState(null);
 
   // Ask for OS notification permission once, quietly — if the browser/
   // platform doesn't support it (e.g. some in-app WebViews), this just
@@ -1092,8 +1095,40 @@ function GuestView({ user }) {
             <span>{new Date(activeRequest.createdAt).toLocaleTimeString()}</span>
           </div>
         </div>
-        {activeRequest.status === "WAITING" && (
+        {activeRequest.status === "WAITING" ? (
           <button className="btn btn-ghost" onClick={() => cancel(activeRequest.id)}>
+            Cancel request
+          </button>
+        ) : confirmCancelId === activeRequest.id ? (
+          <div
+            style={{
+              border: "1px solid #F5C26B",
+              background: "#FFF4E5",
+              borderRadius: 10,
+              padding: "12px 14px",
+              marginTop: 12,
+            }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 600, color: "#8A5A00", marginBottom: 10 }}>
+              {activeRequest.status === "READY"
+                ? "Your car is already waiting at the curb. Cancel anyway?"
+                : "A valet is already bringing your car. Cancel anyway?"}
+            </div>
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                setConfirmCancelId(null);
+                cancel(activeRequest.id);
+              }}
+            >
+              Yes, cancel request
+            </button>
+            <button className="btn btn-ghost" onClick={() => setConfirmCancelId(null)}>
+              Keep my request
+            </button>
+          </div>
+        ) : (
+          <button className="btn btn-ghost" onClick={() => setConfirmCancelId(activeRequest.id)}>
             Cancel request
           </button>
         )}
@@ -1548,8 +1583,9 @@ function VqIcon({ name, size = 14 }) {
   );
 }
 
-// kind: "incoming" | "active" | "scheduled" | "done"
-function VqCard({ r, kind, advance, setZoomedPhoto, user, firstName }) {
+// kind: "incoming" | "active" | "scheduled" | "done" | "cancelled"
+// ("cancelled" = the resident cancelled after a valet had accepted it)
+function VqCard({ r, kind, advance, setZoomedPhoto, user, firstName, onDismiss }) {
   const v = r.vehicle || {};
   const now = new Date();
   const due = !r.scheduledFor || new Date(r.scheduledFor) <= now;
@@ -1559,7 +1595,9 @@ function VqCard({ r, kind, advance, setZoomedPhoto, user, firstName }) {
   if (user?.role === "ADMIN" && v.building?.name) locParts.push(v.building.name);
   const location = locParts.filter(Boolean).join(" · ");
   const when =
-    kind === "done"
+    kind === "cancelled"
+      ? "cancelled " + timeAgo(r.completedAt || r.updatedAt)
+      : kind === "done"
       ? formatDateTime(r.completedAt || r.updatedAt)
       : r.scheduledFor
       ? formatDateTime(r.scheduledFor)
@@ -1570,7 +1608,8 @@ function VqCard({ r, kind, advance, setZoomedPhoto, user, firstName }) {
     (kind === "incoming" ? " incoming" : "") +
     (kind === "active" ? " accent-red" : "") +
     (kind === "scheduled" ? " accent-gray" : "") +
-    (kind === "done" ? " done accent-gray" : "");
+    (kind === "done" ? " done accent-gray" : "") +
+    (kind === "cancelled" ? " cancelled" : "");
 
   const statusChip =
     r.status === "WAITING" ? (
@@ -1603,7 +1642,7 @@ function VqCard({ r, kind, advance, setZoomedPhoto, user, firstName }) {
         <VqIcon name="clock" size={13} />
         <span>{when}</span>
       </div>
-      {kind !== "done" && due && <div className="vq-meta">needs it ASAP</div>}
+      {kind !== "done" && kind !== "cancelled" && due && <div className="vq-meta">needs it ASAP</div>}
       {location && (
         <div className="vq-meta">
           <VqIcon name="pin" size={13} />
@@ -1611,7 +1650,13 @@ function VqCard({ r, kind, advance, setZoomedPhoto, user, firstName }) {
         </div>
       )}
 
-      {kind !== "done" && (
+      {kind === "cancelled" && (
+        <div className="vq-chips">
+          <span className="vq-chip cancelled">Cancelled by resident</span>
+          {r.type === "CHARGE" && <span className="vq-chip tag">⚡ Charging</span>}
+        </div>
+      )}
+      {kind !== "done" && kind !== "cancelled" && (
         <div className="vq-chips">
           <span className={"vq-chip " + (due ? "immediate" : "future")}>{due ? "Immediate" : "Future"}</span>
           {statusChip}
@@ -1653,6 +1698,18 @@ function VqCard({ r, kind, advance, setZoomedPhoto, user, firstName }) {
           </button>
         </div>
       )}
+      {kind === "cancelled" && (
+        <>
+          <div className="vq-meta" style={{ color: "#B42318", fontWeight: 600 }}>
+            Stop — the resident no longer needs this car. Return it to its spot.
+          </div>
+          <div className="vq-actions">
+            <button className="vq-btn complete" onClick={() => onDismiss && onDismiss(r.id)}>
+              <VqIcon name="check" size={16} /> Got it
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1672,7 +1729,7 @@ function VqColumn({ title, count, incoming, empty, children }) {
   );
 }
 
-function NewQueueView({ requests, advance, setZoomedPhoto, user, firstName }) {
+function NewQueueView({ requests, advance, setZoomedPhoto, user, firstName, dismissedCancels = [], onDismissCancel }) {
   const now = new Date();
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -1698,11 +1755,29 @@ function NewQueueView({ requests, advance, setZoomedPhoto, user, firstName }) {
     .filter((r) => !isTomorrow(r.scheduledFor))
     .sort((a, b) => new Date(a.scheduledFor) - new Date(b.scheduledFor));
 
+  // Cancelled by the resident after a valet had accepted it (the server sends
+  // these for 15 minutes); shown until a valet taps "Got it".
+  const cancelledAfterAccept = requests.filter(
+    (r) => r.status === "CANCELLED" && !dismissedCancels.includes(r.id)
+  );
+
   const cardProps = { advance, setZoomedPhoto, user, firstName };
 
   return (
     <>
       <h1 className="title" style={{ marginBottom: 14 }}>Valet Queue</h1>
+
+      {cancelledAfterAccept.length > 0 && (
+        <div className="vq-alert" style={{ background: "#FFF4E5", borderColor: "#F5C26B" }}>
+          <span style={{ color: "#B54708", display: "inline-flex" }}><VqIcon name="bell" size={18} /></span>
+          <strong style={{ color: "#B54708" }}>
+            {cancelledAfterAccept.length === 1
+              ? `${firstName(cancelledAfterAccept[0].requestedBy?.name || "") || "A resident"} cancelled ticket ${cancelledAfterAccept[0].vehicle?.ticketNumber}`
+              : `${cancelledAfterAccept.length} requests were cancelled by residents`}
+          </strong>
+          <span>No need to bring {cancelledAfterAccept.length === 1 ? "it" : "them"} out — see Active queue.</span>
+        </div>
+      )}
 
       {incoming.length > 0 && (
         <div className="vq-alert">
@@ -1719,7 +1794,14 @@ function NewQueueView({ requests, advance, setZoomedPhoto, user, firstName }) {
           {incoming.map((r) => <VqCard key={r.id} r={r} kind="incoming" {...cardProps} />)}
         </VqColumn>
 
-        <VqColumn title="Active queue" count={active.length} empty="No cars in progress">
+        <VqColumn
+          title="Active queue"
+          count={active.length + cancelledAfterAccept.length}
+          empty="No cars in progress"
+        >
+          {cancelledAfterAccept.map((r) => (
+            <VqCard key={r.id} r={r} kind="cancelled" onDismiss={onDismissCancel} {...cardProps} />
+          ))}
           {active.map((r) => <VqCard key={r.id} r={r} kind="active" {...cardProps} />)}
           {recentlyCompleted.length > 0 && <div className="vq-sub">Recently completed</div>}
           {recentlyCompleted.map((r) => <VqCard key={r.id} r={r} kind="done" {...cardProps} />)}
@@ -1739,6 +1821,7 @@ function NewQueueView({ requests, advance, setZoomedPhoto, user, firstName }) {
 
 function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilterBuilding, onLogoUpdated, buildingName }) {
   const [requests, setRequests] = useState([]);
+  const [requestsLoaded, setRequestsLoaded] = useState(false);
   const [alertsEnabled, setAlertsEnabled] = useState(false);
   const [zoomedPhoto, setZoomedPhoto] = useState(null);
   const beepIntervalRef = useRef(null);
@@ -1747,7 +1830,10 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
     const res = await fetch("/api/requests");
     if (signedOut(res)) return;
     const data = await res.json();
-    if (Array.isArray(data)) setRequests(data);
+    if (Array.isArray(data)) {
+      setRequests(data);
+      setRequestsLoaded(true);
+    }
   }, []);
 
   usePolling(load, POLL_VISIBLE_MS, POLL_STAFF_HIDDEN_MS);
@@ -1755,6 +1841,41 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
   const waitingCount = requests.filter(
     (r) => r.status === "WAITING" && (!r.scheduledFor || new Date(r.scheduledFor) <= new Date())
   ).length;
+
+  // Cancellations a valet has acknowledged ("Got it"), remembered on this
+  // device so the card doesn't come back on the next check.
+  const [dismissedCancels, setDismissedCancels] = useState([]);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("bmc_dismissed_cancels") || "[]");
+      if (Array.isArray(saved)) setDismissedCancels(saved);
+    } catch {}
+  }, []);
+  const dismissCancel = useCallback((id) => {
+    setDismissedCancels((prev) => {
+      const next = [...prev.filter((x) => x !== id), id].slice(-50);
+      try {
+        localStorage.setItem("bmc_dismissed_cancels", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  // Ring the doorbell once when a resident cancels a request a valet had
+  // already accepted, so whoever is bringing the car out notices.
+  const seenCancelIds = useRef(null);
+  useEffect(() => {
+    if (!requestsLoaded) return;
+    const ids = requests.filter((r) => r.status === "CANCELLED").map((r) => r.id);
+    // Cancellations already there when the screen opens don't ring.
+    if (seenCancelIds.current === null) {
+      seenCancelIds.current = new Set(ids);
+      return;
+    }
+    const fresh = ids.filter((id) => !seenCancelIds.current.has(id));
+    fresh.forEach((id) => seenCancelIds.current.add(id));
+    if (fresh.length > 0 && alertsEnabled) playAlertSound();
+  }, [requests, requestsLoaded, alertsEnabled]);
 
   // Auto-enable sound on first user interaction with the page — browsers
   // require a user gesture before audio can play. We listen for any click
@@ -1899,6 +2020,8 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
           user={user}
           firstName={firstName}
           buildingName={buildingName}
+          dismissedCancels={dismissedCancels}
+          onDismissCancel={dismissCancel}
         />
       )}
 

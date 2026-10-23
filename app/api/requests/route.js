@@ -8,10 +8,15 @@ async function GET(req) {
   // Active requests, plus pickups completed in the last 12 hours so the
   // queue can show a "Recently completed" list.
   const recentSince = new Date(Date.now() - 12 * 60 * 60 * 1000);
+  // Requests a resident cancelled after a valet had already accepted them
+  // (staff screens never cancel, so a cancelled request with a valet on it was
+  // cancelled by the resident). Shown for 15 minutes so the valet can stop.
+  const cancelSince = new Date(Date.now() - 15 * 60 * 1000);
   const queueStatus = {
     OR: [
       { status: { in: ["WAITING", "PULLING", "READY"] } },
       { status: "COMPLETED", completedAt: { gte: recentSince } },
+      { status: "CANCELLED", handledById: { not: null }, completedAt: { gte: cancelSince } },
     ],
   };
 
