@@ -3837,6 +3837,12 @@ function UserAdmin({ currentUser }) {
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [buildingFilter, setBuildingFilter] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  // Bulk delete: ticked accounts, the confirm step, and the result message.
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkResult, setBulkResult] = useState(null);
+  const [importBuildingId, setImportBuildingId] = useState("");
   const [editUserId, setEditUserId] = useState(null);
   const [editName, setEditName] = useState("");
   const [editUsername, setEditUsername] = useState("");
@@ -3915,7 +3921,7 @@ function UserAdmin({ currentUser }) {
       const res = await fetch("/api/admin/import-parkers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ csvText: text }),
+        body: JSON.stringify({ csvText: text, buildingId: isManager ? undefined : importBuildingId || undefined }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -4065,6 +4071,11 @@ function UserAdmin({ currentUser }) {
     load();
   }, [load]);
 
+  // With only one building there's nothing to choose for imports.
+  useEffect(() => {
+    if (buildings.length === 1) setImportBuildingId((cur) => cur || buildings[0].id);
+  }, [buildings]);
+
   async function handlePhotoSelect(e) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -4210,6 +4221,67 @@ function UserAdmin({ currentUser }) {
     }
     load();
   }
+
+  // Which accounts can be ticked for bulk delete. Admin accounts and your
+  // own account are always removed one at a time.
+  function canBulkDelete(u) {
+    if (u.id === currentUser?.id) return false;
+    if (u.role === "ADMIN" || u.role === "SUPER_ADMIN") return false;
+    if (isManager && !["GUEST", "STAFF"].includes(u.role)) return false;
+    return true;
+  }
+
+  function toggleSelected(id) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    setConfirmBulkDelete(false);
+    setBulkResult(null);
+  }
+
+  async function bulkDeleteUsers(ids) {
+    setBulkDeleting(true);
+    setBulkResult(null);
+    try {
+      const res = await fetch("/api/admin/users/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setBulkResult({ error: data.error || "Couldn't delete those accounts. Please try again." });
+        return;
+      }
+      setBulkResult({ deleted: data.deleted, skipped: data.skipped || [] });
+      setSelectedIds(new Set());
+      setConfirmBulkDelete(false);
+      load();
+    } catch {
+      setBulkResult({ error: "Couldn't reach the server. Please try again." });
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
+  const visibleUsers = users
+    .filter((u) => roleFilter === "ALL" || u.role === roleFilter)
+    .filter((u) => buildingFilter === "ALL" || u.building?.id === buildingFilter)
+    .filter(
+      (u) =>
+        !searchQuery ||
+        u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (u.unitNumber || "").toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  const selectableVisible = visibleUsers.filter(canBulkDelete);
+  // Only accounts that are ticked AND currently shown are deleted, so a
+  // filter change never deletes something you can't see.
+  const selectedVisible = selectableVisible.filter((u) => selectedIds.has(u.id));
+  const allVisibleSelected = selectableVisible.length > 0 && selectedVisible.length === selectableVisible.length;
 
   return (
     <>
@@ -4445,6 +4517,17 @@ function UserAdmin({ currentUser }) {
 
       {/* CSV bulk import */}
       <div style={{ marginTop: 10 }}>
+        {!isManager && buildings.length > 0 && (
+          <div className="field" style={{ marginBottom: 8, maxWidth: 360 }}>
+            <label>Import residents into</label>
+            <select value={importBuildingId} onChange={(e) => { setImportBuildingId(e.target.value); setImportError(""); }}>
+              <option value="">Select a building…</option>
+              {buildings.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <input
           ref={csvInputRef}
           type="file"
@@ -4455,7 +4538,13 @@ function UserAdmin({ currentUser }) {
         <button
           className="btn btn-ghost"
           disabled={importing}
-          onClick={() => csvInputRef.current?.click()}
+          onClick={() => {
+            if (!isManager && buildings.length > 0 && !importBuildingId) {
+              setImportError("Choose which building to import these residents into first.");
+              return;
+            }
+            csvInputRef.current?.click();
+          }}
           style={{ width: "auto", padding: "10px 16px", fontSize: 13 }}
         >
           {importing ? "Importing…" : "📥 Import Monthly Parkers (CSV)"}
@@ -4486,14 +4575,15 @@ function UserAdmin({ currentUser }) {
               ))}
             </div>
           )}
-          <div style={{ fontSize: 12, color: "var(--slate2)", marginBottom: 6, fontWeight: 600 }}>
-            Created accounts (save these passwords):
-          </div>
+          {importResults.results.length > 0 && (
+            <div style={{ fontSize: 12, color: "var(--slate2)", marginBottom: 6, fontWeight: 600 }}>
+              Everyone signs in with the username below and the password <strong>Bringmycar</strong>, then picks their own password.
+            </div>
+          )}
           {importResults.results.map((r, i) => (
             <div key={i} style={{ fontSize: 12, marginBottom: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
               <span style={{ fontWeight: 600 }}>{r.name}</span>
-              <span>@{r.username}</span>
-              <span style={{ color: "var(--slate2)" }}>pw: {r.password}</span>
+              <span>username: {r.username}</span>
               {r.unit && <span style={{ color: "var(--slate2)" }}>unit: {r.unit}</span>}
               {r.decal && <span style={{ color: "var(--slate2)" }}>decal: {r.decal}</span>}
             </div>
@@ -4508,25 +4598,101 @@ function UserAdmin({ currentUser }) {
         </div>
       )}
 
-      {users
-        .filter((u) => roleFilter === "ALL" || u.role === roleFilter)
-        .filter((u) => buildingFilter === "ALL" || u.building?.id === buildingFilter)
-        .filter(
-          (u) =>
-            !searchQuery ||
-            u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (u.unitNumber || "").toLowerCase().includes(searchQuery.toLowerCase())
-        )
-        .map((u) => (
+      {/* Bulk delete toolbar */}
+      {selectableVisible.length > 0 && (
+        <div className="bulk-bar">
+          <label className="bulk-check">
+            <input
+              type="checkbox"
+              checked={allVisibleSelected}
+              onChange={() => {
+                setSelectedIds(allVisibleSelected ? new Set() : new Set(selectableVisible.map((u) => u.id)));
+                setConfirmBulkDelete(false);
+                setBulkResult(null);
+              }}
+            />
+            Select all shown ({selectableVisible.length})
+          </label>
+          {selectedVisible.length > 0 && !confirmBulkDelete && (
+            <div className="bulk-actions">
+              <span className="bulk-count">{selectedVisible.length} selected</span>
+              <button type="button" className="bulk-delete-btn" onClick={() => { setConfirmBulkDelete(true); setBulkResult(null); }}>
+                Delete selected
+              </button>
+              <button type="button" className="bulk-clear-btn" onClick={() => setSelectedIds(new Set())}>
+                Clear
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {confirmBulkDelete && selectedVisible.length > 0 && (
+        <div className="bulk-confirm">
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>
+            Delete {selectedVisible.length} account{selectedVisible.length !== 1 ? "s" : ""}?
+          </div>
+          <div style={{ fontSize: 13, lineHeight: 1.5, marginBottom: 8 }}>
+            {selectedVisible.slice(0, 5).map((u) => u.name).join(", ")}
+            {selectedVisible.length > 5 ? ` and ${selectedVisible.length - 5} more` : ""}
+          </div>
+          <div style={{ fontSize: 13, lineHeight: 1.5, marginBottom: 12 }}>
+            This also permanently deletes their cars and request history. This can't be undone.
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="bulk-delete-btn"
+              disabled={bulkDeleting}
+              onClick={() => bulkDeleteUsers(selectedVisible.map((u) => u.id))}
+            >
+              {bulkDeleting
+                ? "Deleting…"
+                : `Yes, delete ${selectedVisible.length} account${selectedVisible.length !== 1 ? "s" : ""}`}
+            </button>
+            <button type="button" className="bulk-clear-btn" disabled={bulkDeleting} onClick={() => setConfirmBulkDelete(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {bulkResult && (
+        <div className={bulkResult.error ? "error-box" : "bulk-done"} style={{ marginTop: 10 }}>
+          {bulkResult.error ||
+            `${bulkResult.deleted} account${bulkResult.deleted !== 1 ? "s" : ""} deleted.`}
+          {bulkResult.skipped?.length > 0 && (
+            <div style={{ marginTop: 6, fontSize: 12 }}>
+              {bulkResult.skipped.map((s) => (
+                <div key={s.id}>Not deleted: {s.name} — {s.reason}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {visibleUsers.map((u) => (
         <div key={u.id} style={{ marginBottom: resetPasswordUserId === u.id ? 4 : 0 }}>
           <div className="list-row">
-            <div>
-              <div>{u.name}</div>
-              <div style={{ fontSize: 12, color: "var(--slate2)" }}>
-                {u.username}
-                {u.building ? ` · ${u.building.name}` : ""}
-                {u.unitNumber ? ` · Unit ${u.unitNumber}` : ""}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+              {selectableVisible.length > 0 && (
+                <input
+                  type="checkbox"
+                  className="row-check"
+                  aria-label={`Select ${u.name}`}
+                  checked={selectedIds.has(u.id)}
+                  disabled={!canBulkDelete(u)}
+                  style={{ visibility: canBulkDelete(u) ? "visible" : "hidden" }}
+                  onChange={() => toggleSelected(u.id)}
+                />
+              )}
+              <div style={{ minWidth: 0 }}>
+                <div>{u.name}</div>
+                <div style={{ fontSize: 12, color: "var(--slate2)" }}>
+                  {u.username}
+                  {u.building ? ` · ${u.building.name}` : ""}
+                  {u.unitNumber ? ` · Unit ${u.unitNumber}` : ""}
+                </div>
               </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

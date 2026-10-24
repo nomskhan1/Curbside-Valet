@@ -7,8 +7,12 @@ const { getSessionFromRequest } = require("../../../../lib/auth");
 // first_name, last_name, unit, make, model, color, license_plate,
 // decal_number, section, location, wash_day
 //
-// Password defaults to unit number if provided, otherwise a random 8-char string.
-// Username is first_name.last_name (lowercased, spaces replaced with dots).
+// Every imported resident gets the default password "Bringmycar" and must
+// choose their own the first time they sign in.
+// Username is the first initial + last name, lowercased: John Smith -> jsmith.
+// If that's taken, a number is added: jsmith2, jsmith3, ...
+
+const DEFAULT_PASSWORD = "Bringmycar";
 
 const VALID_WASH_DAYS = ["SUNDAY","MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY"];
 const VALID_FUEL_TYPES = ["GASOLINE","ELECTRIC","PLUGIN_HYBRID"];
@@ -30,12 +34,12 @@ function parseCSV(text) {
 }
 
 function generateUsername(firstName, lastName, existing) {
-  const base = `${firstName}.${lastName}`
-    .toLowerCase()
-    .replace(/[^a-z0-9.]/g, "")
-    .replace(/\.+/g, ".");
+  const clean = (v) => (v || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const first = clean(firstName);
+  const last = clean(lastName);
+  const base = (last ? first.slice(0, 1) + last : first) || "resident";
   let username = base;
-  let counter = 1;
+  let counter = 2;
   while (existing.has(username)) {
     username = `${base}${counter}`;
     counter++;
@@ -62,7 +66,14 @@ async function POST(req) {
     session.role === "MANAGER" ? session.buildingId : (buildingId || session.buildingId);
 
   if (!targetBuildingId) {
-    return new Response(JSON.stringify({ error: "No building selected." }), { status: 400 });
+    return new Response(JSON.stringify({ error: "Choose which building to import these residents into." }), { status: 400 });
+  }
+  const targetBuilding = await prisma.building.findUnique({
+    where: { id: targetBuildingId },
+    select: { id: true },
+  });
+  if (!targetBuilding) {
+    return new Response(JSON.stringify({ error: "That building wasn't found." }), { status: 400 });
   }
 
   let rows;
@@ -72,9 +83,12 @@ async function POST(req) {
     return new Response(JSON.stringify({ error: e.message }), { status: 400 });
   }
 
-  // Load existing usernames to avoid duplicates
+  // Load existing usernames to avoid duplicates (ignoring capital letters,
+  // since sign-in doesn't care about them either).
   const existingUsers = await prisma.user.findMany({ select: { username: true } });
-  const existingUsernames = new Set(existingUsers.map((u) => u.username));
+  const existingUsernames = new Set(existingUsers.map((u) => u.username.toLowerCase()));
+  // Hash the shared starting password once instead of once per resident.
+  const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10);
   // Ticket/decal numbers only need to be unique within this building.
   const existingDecals = new Set(
     (
@@ -101,9 +115,20 @@ async function POST(req) {
       continue;
     }
 
+    // A decal that's already in this building means the row was imported
+    // before. Skip it so importing the same file twice doesn't create a
+    // second account for the same resident.
+    const decalNumber = row.decal_number || row.decal || row.ticket_number || row.ticket || "";
+    if (decalNumber && existingDecals.has(decalNumber)) {
+      errors.push({
+        row: rowNum,
+        error: `Decal #${decalNumber} is already in this building — row skipped, no account created`,
+      });
+      continue;
+    }
+
     const username = generateUsername(firstName, lastName, existingUsernames);
-    const password = unit || crypto.randomBytes(4).toString("hex");
-    const passwordHash = await bcrypt.hash(password, 10);
+    const password = DEFAULT_PASSWORD;
     const name = [firstName, lastName].filter(Boolean).join(" ");
 
     try {
@@ -114,43 +139,39 @@ async function POST(req) {
           passwordHash,
           role: "GUEST",
           buildingId: targetBuildingId,
-          // The starting password is the unit number (or a short random
-          // code), so residents must pick their own on first sign-in.
+          unitNumber: unit || null,
+          // Everyone starts with the shared default password, so residents
+          // must pick their own on first sign-in.
           mustChangePassword: true,
         },
       });
 
       // Create vehicle if decal number provided
-      const decalNumber = row.decal_number || row.decal || row.ticket_number || row.ticket || "";
       if (decalNumber) {
-        if (existingDecals.has(decalNumber)) {
-          errors.push({ row: rowNum, error: `Decal #${decalNumber} already exists — account created but no vehicle added` });
-        } else {
-          existingDecals.add(decalNumber);
-          const washDay = VALID_WASH_DAYS.includes((row.wash_day || "").toUpperCase())
-            ? row.wash_day.toUpperCase()
-            : null;
-          const fuelType = VALID_FUEL_TYPES.includes((row.fuel_type || "").toUpperCase())
-            ? row.fuel_type.toUpperCase()
-            : "GASOLINE";
+        existingDecals.add(decalNumber);
+        const washDay = VALID_WASH_DAYS.includes((row.wash_day || "").toUpperCase())
+          ? row.wash_day.toUpperCase()
+          : null;
+        const fuelType = VALID_FUEL_TYPES.includes((row.fuel_type || "").toUpperCase())
+          ? row.fuel_type.toUpperCase()
+          : "GASOLINE";
 
-          await prisma.vehicle.create({
-            data: {
-              make: row.make || null,
-              model: row.model || null,
-              color: row.color || null,
-              licensePlate: row.license_plate || row.plate || null,
-              ticketNumber: decalNumber,
-              ownerId: user.id,
-              buildingId: targetBuildingId,
-              section: row.section || null,
-              location: row.location || null,
-              washDay,
-              fuelType,
-              claimToken: crypto.randomBytes(16).toString("hex"),
-            },
-          });
-        }
+        await prisma.vehicle.create({
+          data: {
+            make: row.make || null,
+            model: row.model || null,
+            color: row.color || null,
+            licensePlate: row.license_plate || row.plate || null,
+            ticketNumber: decalNumber,
+            ownerId: user.id,
+            buildingId: targetBuildingId,
+            section: row.section || null,
+            location: row.location || null,
+            washDay,
+            fuelType,
+            claimToken: crypto.randomBytes(16).toString("hex"),
+          },
+        });
       }
 
       results.push({

@@ -168,3 +168,15 @@ footer.note{ text-align:center; font-size:11px; color:var(--slate2); padding:14p
 .vq-btn.move{ height:36px; background:#FFF5F5; color:#C62828; border:1px solid #F3B5B5; font-weight:500; }
 .vq-btn.undo{ flex:0 0 40px; background:#fff; color:#4B5563; border:1px solid #D1D5DB; }
 .vq-sub{ font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:#9CA3AF; margin:4px 2px 0; }
+
+/* Users: bulk delete */
+.bulk-bar{ display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-top:18px; padding:10px 12px; background:var(--bg-2); border:1px solid var(--line); border-radius:10px; font-size:13px; }
+.bulk-check{ display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--ink); }
+.bulk-check input, .row-check{ width:18px; height:18px; margin:0; flex:0 0 auto; accent-color:var(--red); cursor:pointer; }
+.bulk-actions{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.bulk-count{ font-weight:600; color:var(--ink); }
+.bulk-delete-btn{ background:var(--red); color:#fff; border:none; border-radius:8px; padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; }
+.bulk-delete-btn:disabled{ opacity:0.6; cursor:default; }
+.bulk-clear-btn{ background:none; border:1px solid var(--line); color:var(--ink); border-radius:8px; padding:8px 14px; font-size:13px; cursor:pointer; }
+.bulk-confirm{ margin-top:10px; padding:14px 16px; border:1px solid var(--red); border-radius:10px; background:rgba(176,65,58,0.08); color:#7A2A26; }
+.bulk-done{ padding:10px 14px; border:1px solid var(--green); border-radius:8px; background:rgba(74,120,86,0.1); color:#2F5A3B; font-size:13px; }

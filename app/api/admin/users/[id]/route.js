@@ -1,5 +1,6 @@
 const prisma = require("../../../../../lib/db");
 const { getSessionFromRequest } = require("../../../../../lib/auth");
+const { deleteUsersWithData } = require("../../../../../lib/deleteUsers");
 
 async function DELETE(req, { params }) {
   const session = getSessionFromRequest(req);
@@ -39,31 +40,7 @@ async function DELETE(req, { params }) {
   // Admin can remove an account even if it owns vehicles or has request
   // history — everything tied to it is cleaned up together rather than
   // blocking the removal.
-
-  // Clear this user as the "handled by" staff member on any past requests —
-  // that's just a historical reference and doesn't need to block anything.
-  await prisma.request.updateMany({
-    where: { handledById: id },
-    data: { handledById: null },
-  });
-
-  // Delete any requests this user made themselves (e.g. requesting a
-  // visitor's car by ticket number, which isn't tied to a vehicle they own).
-  await prisma.request.deleteMany({ where: { requestedById: id } });
-
-  // Delete requests tied to vehicles this user owns, then the vehicles
-  // themselves.
-  const ownedVehicles = await prisma.vehicle.findMany({
-    where: { ownerId: id },
-    select: { id: true },
-  });
-  const ownedVehicleIds = ownedVehicles.map((v) => v.id);
-  if (ownedVehicleIds.length > 0) {
-    await prisma.request.deleteMany({ where: { vehicleId: { in: ownedVehicleIds } } });
-    await prisma.vehicle.deleteMany({ where: { ownerId: id } });
-  }
-
-  await prisma.user.delete({ where: { id } });
+  await deleteUsersWithData(prisma, [id]);
 
   return new Response(JSON.stringify({ ok: true }), { status: 200 });
 }

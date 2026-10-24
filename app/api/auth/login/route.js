@@ -23,13 +23,24 @@ function lockedMessage(until) {
 
 async function POST(req) {
   const body = await req.json().catch(() => null);
-  const { username, password } = body || {};
+  const { password } = body || {};
+  const username = typeof body?.username === "string" ? body.username.trim() : "";
 
   if (!username || !password) {
     return json({ error: "Username and password are required." }, 400);
   }
 
-  const user = await prisma.user.findUnique({ where: { username } });
+  // Capital letters don't matter: "Jsmith" (phones capitalize the first
+  // letter) signs in as "jsmith". An exact match always wins; otherwise a
+  // case-insensitive match is used only when it points to exactly one account.
+  let user = await prisma.user.findUnique({ where: { username } });
+  if (!user) {
+    const matches = await prisma.user.findMany({
+      where: { username: { equals: username, mode: "insensitive" } },
+      take: 2,
+    });
+    if (matches.length === 1) user = matches[0];
+  }
   if (!user) {
     return json({ error: "Incorrect username or password." }, 401);
   }
