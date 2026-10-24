@@ -178,6 +178,7 @@ async function POST(req) {
   const updates = []; // changes for people who already had an account
   const errors = [];
   let unchanged = 0;
+  let skippedStaff = 0;
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
@@ -190,6 +191,13 @@ async function POST(req) {
 
     if (!firstName) {
       errors.push({ row: rowNum, error: "first_name is required" });
+      continue;
+    }
+    // A file exported from the Users screen has a role column. Only monthly
+    // parkers are imported; staff, managers and admins are left alone.
+    const role = (row.role || "").trim().toLowerCase();
+    if (role && !["monthly parker", "guest", "resident"].includes(role)) {
+      skippedStaff++;
       continue;
     }
     const name = [firstName, lastName].filter(Boolean).join(" ");
@@ -305,7 +313,7 @@ async function POST(req) {
   }
 
   return new Response(
-    JSON.stringify({ ok: true, created: results.length, errors, results, updates, unchanged }),
+    JSON.stringify({ ok: true, created: results.length, errors, results, updates, unchanged, skippedStaff }),
     { status: 200 }
   );
 }

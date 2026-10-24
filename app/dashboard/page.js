@@ -4552,6 +4552,60 @@ function UserAdmin({ currentUser }) {
   const selectedVisible = selectableVisible.filter((u) => selectedIds.has(u.id));
   const allVisibleSelected = selectableVisible.length > 0 && selectedVisible.length === selectableVisible.length;
 
+  // Downloads the accounts currently shown (search and filters apply) as a
+  // CSV in the same columns as the import, one row per person per car, so it
+  // can be edited and imported back. Passwords are never included.
+  function exportUsersCsv() {
+    const ROLE_LABEL = { GUEST: "Monthly parker", STAFF: "Staff", MANAGER: "Manager", ADMIN: "Admin", SUPER_ADMIN: "Super admin" };
+    const headers = [
+      "first_name", "last_name", "username", "role", "building", "unit",
+      "decal_number", "make", "model", "color", "license_plate", "fuel_type",
+      "section", "location", "wash_day", "shared_with",
+    ];
+    const rows = [];
+    for (const u of visibleUsers) {
+      const parts = (u.name || "").trim().split(/\s+/);
+      const first = parts.shift() || "";
+      const base = [first, parts.join(" "), u.username, ROLE_LABEL[u.role] || u.role, u.building?.name || "", u.unitNumber || ""];
+      const cars = vehicles.filter((v) => onCar(v, u.id));
+      if (cars.length === 0) rows.push([...base, "", "", "", "", "", "", "", "", "", ""]);
+      for (const v of cars) {
+        const others = [v.owner, ...(v.drivers || []).map((d) => d.user)]
+          .filter((p) => p && p.id !== u.id)
+          .map((p) => p.name)
+          .join("; ");
+        rows.push([
+          ...base, v.ticketNumber, v.make || "", v.model || "", v.color || "", v.licensePlate || "",
+          v.fuelType || "", v.section || "", v.location || "", v.washDay || "", others,
+        ]);
+      }
+    }
+    const escapeCsv = (val) => {
+      let str = String(val ?? "");
+      // Stop spreadsheet programs from treating a value as a formula.
+      if (/^[=+@\t]/.test(str)) str = "'" + str;
+      return /[",\r\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+    };
+    // The leading marker makes Excel open names with accents correctly.
+    const csv = "\uFEFF" + [headers, ...rows].map((row) => row.map(escapeCsv).join(",")).join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const where =
+      isManager
+        ? currentUser?.building?.name || "building"
+        : buildingFilter !== "ALL"
+        ? buildings.find((b) => b.id === buildingFilter)?.name || "building"
+        : "all-buildings";
+    const slug = where.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    a.href = url;
+    a.download = `users-${slug}-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <>
       <div className="queue-header">
@@ -4818,6 +4872,15 @@ function UserAdmin({ currentUser }) {
         >
           {importing ? "Importing…" : "📥 Import Monthly Parkers (CSV)"}
         </button>
+        <button
+          className="btn btn-ghost"
+          disabled={visibleUsers.length === 0}
+          onClick={exportUsersCsv}
+          title="Downloads the accounts shown below (search and filters apply)"
+          style={{ width: "auto", padding: "10px 16px", fontSize: 13, marginLeft: 8 }}
+        >
+          📤 Export {visibleUsers.length === users.length ? "all" : visibleUsers.length} user{visibleUsers.length === 1 ? "" : "s"} (CSV)
+        </button>
         <a
           href="/api/admin/import-parkers/template"
           style={{ fontSize: 12, color: "var(--slate2)", marginLeft: 12 }}
@@ -4869,6 +4932,11 @@ function UserAdmin({ currentUser }) {
               {importResults.updates.map((u, i) => (
                 <div key={i} style={{ fontSize: 12, marginBottom: 3 }}>{u.message}</div>
               ))}
+            </div>
+          )}
+          {importResults.skippedStaff > 0 && (
+            <div style={{ fontSize: 12, color: "var(--slate2)", marginTop: 8 }}>
+              {importResults.skippedStaff} staff/manager row{importResults.skippedStaff !== 1 ? "s" : ""} skipped — only monthly parkers are imported.
             </div>
           )}
           {importResults.unchanged > 0 && (
