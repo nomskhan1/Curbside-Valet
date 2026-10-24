@@ -38,9 +38,12 @@ async function DELETE(req, { params }) {
 
   // Clear out completed/cancelled request history tied to this vehicle, then
   // the vehicle itself.
-  await prisma.request.deleteMany({ where: { vehicleId: id } });
-  await prisma.washLog.deleteMany({ where: { vehicleId: id } });
-  await prisma.vehicle.delete({ where: { id } });
+  await prisma.$transaction([
+    prisma.request.deleteMany({ where: { vehicleId: id } }),
+    prisma.washLog.deleteMany({ where: { vehicleId: id } }),
+    prisma.vehicleDriver.deleteMany({ where: { vehicleId: id } }),
+    prisma.vehicle.delete({ where: { id } }),
+  ]);
 
   return new Response(JSON.stringify({ ok: true }), { status: 200 });
 }
@@ -111,7 +114,14 @@ async function PATCH(req, { params }) {
   const updated = await prisma.vehicle.update({
     where: { id },
     data,
-    include: { owner: { select: { name: true, username: true } }, building: { select: { name: true } } },
+    include: {
+      owner: { select: { id: true, name: true, username: true, unitNumber: true } },
+      building: { select: { name: true } },
+      drivers: {
+        orderBy: { createdAt: "asc" },
+        select: { userId: true, user: { select: { id: true, name: true, username: true, unitNumber: true } } },
+      },
+    },
   });
 
   return new Response(JSON.stringify(updated), { status: 200 });

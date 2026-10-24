@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const prisma = require("../../../lib/db");
 const { getSessionFromRequest } = require("../../../lib/auth");
+const { vehicleAccessWhere } = require("../../../lib/vehicleAccess");
 
 async function GET(req) {
   const session = getSessionFromRequest(req);
@@ -8,7 +9,8 @@ async function GET(req) {
 
   let where;
   if (session.role === "GUEST") {
-    where = { ownerId: session.id, isVisitor: false };
+    // Their own cars plus cars they're named on (shared parking application).
+    where = { ...vehicleAccessWhere(session.id), isVisitor: false };
   } else if (session.role === "STAFF" || session.role === "MANAGER") {
     where = { buildingId: session.buildingId || "__none__", isVisitor: false };
   } else {
@@ -24,11 +26,20 @@ async function GET(req) {
     };
   }
 
+  const isGuest = session.role === "GUEST";
   const vehicles = await prisma.vehicle.findMany({
     where,
     include: {
-      owner: { select: { name: true, username: true } },
+      owner: { select: isGuest ? { id: true, name: true } : { id: true, name: true, username: true, unitNumber: true } },
       building: { select: { id: true, name: true } },
+      // Everyone else on the car's parking application.
+      drivers: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          userId: true,
+          user: { select: isGuest ? { id: true, name: true } : { id: true, name: true, username: true, unitNumber: true } },
+        },
+      },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -80,11 +91,16 @@ async function POST(req) {
   // Ticket numbers only need to be unique within the owner's building.
   const existing = await prisma.vehicle.findFirst({
     where: { ticketNumber, buildingId: owner.buildingId || null },
+    include: { owner: { select: { name: true } } },
   });
   if (existing) {
-    return new Response(JSON.stringify({ error: "That ticket number is already in use at this building." }), {
-      status: 409,
-    });
+    const who = existing.owner?.name && !existing.isVisitor ? ` to ${existing.owner.name}` : "";
+    return new Response(
+      JSON.stringify({
+        error: `Decal #${ticketNumber} is already registered${who} at this building. If they share this car, add this person to it instead (Users → Edit → "Add to a car already on file").`,
+      }),
+      { status: 409 }
+    );
   }
 
   const vehicle = await prisma.vehicle.create({

@@ -1,5 +1,6 @@
 const prisma = require("../../../lib/db");
 const { getSessionFromRequest, renewSessionIfNeeded } = require("../../../lib/auth");
+const { vehicleAccessWhere, canUseVehicle } = require("../../../lib/vehicleAccess");
 
 async function GET(req) {
   const session = getSessionFromRequest(req);
@@ -22,7 +23,14 @@ async function GET(req) {
 
   let where;
   if (session.role === "GUEST") {
-    where = { requestedById: session.id };
+    // Requests they made, plus requests on any car they're named on — so
+    // two people sharing a car both see it's already on its way.
+    where = {
+      OR: [
+        { requestedById: session.id },
+        { vehicle: { isVisitor: false, ...vehicleAccessWhere(session.id) } },
+      ],
+    };
   } else if (session.role === "STAFF" || session.role === "MANAGER") {
     // Staff and managers only see the active queue for their own building.
     where = {
@@ -125,7 +133,7 @@ async function POST(req) {
   // Guests requesting by their own saved vehicle must own it. Guests
   // requesting by ticket number don't need to — the ticket itself is the
   // proof, same as handing a physical valet stub to any staff member.
-  if (session.role === "GUEST" && vehicleId && vehicle.ownerId !== session.id) {
+  if (session.role === "GUEST" && vehicleId && !(await canUseVehicle(prisma, session.id, vehicle))) {
     return new Response(JSON.stringify({ error: "That vehicle isn't linked to your account." }), {
       status: 403,
     });

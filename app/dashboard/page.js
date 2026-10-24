@@ -945,7 +945,11 @@ function GuestView({ user }) {
   // The pickup happening now (waiting to be accepted, or on its way). Pickups
   // scheduled for later are listed separately and don't stop the resident
   // from asking for the car right now.
-  const activeRequest = requests.find((r) => r.type !== "CHARGE" && isActive(r) && !isUpcoming(r));
+  // A household can have several cars on their way at once (e.g. both
+  // spouses heading out), so every current pickup is shown.
+  const activeRequests = requests
+    .filter((r) => r.type !== "CHARGE" && isActive(r) && !isUpcoming(r))
+    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
   const upcomingRequests = requests
     .filter((r) => r.type !== "CHARGE" && isUpcoming(r))
     .sort((a, b) => new Date(a.scheduledFor) - new Date(b.scheduledFor));
@@ -1058,103 +1062,103 @@ function GuestView({ user }) {
     load();
   }
 
-  let pickupSection;
-  if (activeRequest) {
-    pickupSection = (
-      <>
-        <div className="hero-line">Ticket received</div>
-        <h1 className="title">We&apos;re on it</h1>
-        <div className="stub">
-          <div className="stub-top">
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              {activeRequest.vehicle.photoUrl && (
-                <img
-                  src={activeRequest.vehicle.photoUrl}
-                  alt=""
-                  onClick={() => setZoomedPhoto(activeRequest.vehicle.photoUrl)}
-                  style={{ width: 52, height: 52, borderRadius: 8, objectFit: "cover", cursor: "pointer" }}
-                />
-              )}
-              <div>
-                <div className="stub-num-label">Ticket</div>
-                <div className="stub-num">{activeRequest.vehicle.ticketNumber}</div>
-              </div>
+  // Who else is on a car (people on the same parking application).
+  function sharedWith(v) {
+    const names = [v.owner, ...(v.drivers || []).map((d) => d.user)]
+      .filter((p) => p && p.id !== user.id)
+      .map((p) => firstName(p.name));
+    return names.length ? `Shared with ${names.join(", ")}` : "";
+  }
+  // The household member who made a request, when it wasn't you.
+  const byOther = (r) =>
+    r.requestedById && r.requestedById !== user.id ? r.requestedBy?.name || "Someone in your household" : null;
+
+  const myCars = vehicles.filter((v) => !v.isVisitor);
+  // Cars that aren't already on their way can still be requested.
+  const carsFree = myCars.filter((v) => !activeRequests.some((r) => r.vehicleId === v.id));
+
+  const activeStubs = activeRequests.map((r) => (
+    <div key={r.id} style={{ marginBottom: 16 }}>
+      <div className="stub">
+        <div className="stub-top">
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {r.vehicle.photoUrl && (
+              <img
+                src={r.vehicle.photoUrl}
+                alt=""
+                onClick={() => setZoomedPhoto(r.vehicle.photoUrl)}
+                style={{ width: 52, height: 52, borderRadius: 8, objectFit: "cover", cursor: "pointer" }}
+              />
+            )}
+            <div>
+              <div className="stub-num-label">Ticket</div>
+              <div className="stub-num">{r.vehicle.ticketNumber}</div>
             </div>
-            <span className={`status-pill status-${activeRequest.status}`}>
-              <span className="dot"></span>
-              {STATUS_LABEL[activeRequest.status]}
-            </span>
           </div>
-          <div className="stub-divider"></div>
-          <div className="stub-row">
-            <span>Vehicle</span>
-            <span>{vehicleLabel(activeRequest.vehicle)}</span>
-          </div>
-          <div className="stub-row">
-            <span>Requested</span>
-            <span>{new Date(activeRequest.createdAt).toLocaleTimeString()}</span>
-          </div>
+          <span className={`status-pill status-${r.status}`}>
+            <span className="dot"></span>
+            {STATUS_LABEL[r.status]}
+          </span>
         </div>
-        {activeRequest.status === "WAITING" ? (
-          <button className="btn btn-ghost" onClick={() => cancel(activeRequest.id)}>
-            Cancel request
-          </button>
-        ) : confirmCancelId === activeRequest.id ? (
-          <div
-            style={{
-              border: "1px solid #F5C26B",
-              background: "#FFF4E5",
-              borderRadius: 10,
-              padding: "12px 14px",
-              marginTop: 12,
+        <div className="stub-divider"></div>
+        <div className="stub-row">
+          <span>Vehicle</span>
+          <span>{vehicleLabel(r.vehicle)}</span>
+        </div>
+        <div className="stub-row">
+          <span>Requested</span>
+          <span>{new Date(r.createdAt).toLocaleTimeString()}</span>
+        </div>
+        {byOther(r) && (
+          <div className="stub-row">
+            <span>Requested by</span>
+            <span>{byOther(r)}</span>
+          </div>
+        )}
+      </div>
+      {r.status === "WAITING" ? (
+        <button className="btn btn-ghost" onClick={() => cancel(r.id)}>
+          Cancel request
+        </button>
+      ) : confirmCancelId === r.id ? (
+        <div
+          style={{
+            border: "1px solid #F5C26B",
+            background: "#FFF4E5",
+            borderRadius: 10,
+            padding: "12px 14px",
+            marginTop: 12,
+          }}
+        >
+          <div style={{ fontSize: 14, fontWeight: 600, color: "#8A5A00", marginBottom: 10 }}>
+            {r.status === "READY"
+              ? "This car is already waiting at the curb. Cancel anyway?"
+              : "A valet is already bringing this car. Cancel anyway?"}
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={() => {
+              setConfirmCancelId(null);
+              cancel(r.id);
             }}
           >
-            <div style={{ fontSize: 14, fontWeight: 600, color: "#8A5A00", marginBottom: 10 }}>
-              {activeRequest.status === "READY"
-                ? "Your car is already waiting at the curb. Cancel anyway?"
-                : "A valet is already bringing your car. Cancel anyway?"}
-            </div>
-            <button
-              className="btn btn-primary"
-              onClick={() => {
-                setConfirmCancelId(null);
-                cancel(activeRequest.id);
-              }}
-            >
-              Yes, cancel request
-            </button>
-            <button className="btn btn-ghost" onClick={() => setConfirmCancelId(null)}>
-              Keep my request
-            </button>
-          </div>
-        ) : (
-          <button className="btn btn-ghost" onClick={() => setConfirmCancelId(activeRequest.id)}>
-            Cancel request
+            Yes, cancel request
           </button>
-        )}
-      </>
-    );
-  } else {
-    pickupSection = (
-      <>
-      {upcomingRequests.length > 0 && (
-        <>
-          <div className="hero-line">Need it sooner?</div>
-          <h1 className="title" style={{ fontSize: 22 }}>
-            Request your car now
-          </h1>
-        </>
-      )}
-      {vehicles.filter((v) => !v.isVisitor).length === 0 && (
-        <div className="empty-state">
-          <div className="big">No vehicles yet</div>
-          Ask your building's front desk or admin to add your vehicle to your account.
+          <button className="btn btn-ghost" onClick={() => setConfirmCancelId(null)}>
+            Keep my request
+          </button>
         </div>
+      ) : (
+        <button className="btn btn-ghost" onClick={() => setConfirmCancelId(r.id)}>
+          Cancel request
+        </button>
       )}
+    </div>
+  ));
 
-      {vehicles
-        .filter((v) => !v.isVisitor)
-        .map((v) => (
+  const carList = (
+    <>
+      {carsFree.map((v) => (
         <div key={v.id} className="queue-item">
           {v.photoUrl ? (
             <img
@@ -1170,7 +1174,10 @@ function GuestView({ user }) {
             <div className="car">
               {vehicleLabel(v)}
             </div>
-            <div className="meta">{v.licensePlate || "No plate on file"}</div>
+            <div className="meta">
+              {v.licensePlate || "No plate on file"}
+              {sharedWith(v) && ` · ${sharedWith(v)}`}
+            </div>
           </div>
           <div className="queue-actions">
             <button className="mini-btn start" onClick={() => requestPickup(v.id)}>
@@ -1181,26 +1188,65 @@ function GuestView({ user }) {
       ))}
 
       {/* Schedule-for-later toggle, applies to whichever request button is pressed next */}
-      <div className="field" style={{ marginTop: 10 }}>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={scheduleMode}
-            onChange={(e) => setScheduleMode(e.target.checked)}
-            style={{ width: "auto" }}
-          />
-          Schedule for later instead of right now
-        </label>
-        {scheduleMode && (
-          <input
-            type="datetime-local"
-            value={scheduledFor}
-            onChange={(e) => setScheduledFor(e.target.value)}
-            style={{ marginTop: 10 }}
-            required
-          />
+      {carsFree.length > 0 && (
+        <div className="field" style={{ marginTop: 10 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={scheduleMode}
+              onChange={(e) => setScheduleMode(e.target.checked)}
+              style={{ width: "auto" }}
+            />
+            Schedule for later instead of right now
+          </label>
+          {scheduleMode && (
+            <input
+              type="datetime-local"
+              value={scheduledFor}
+              onChange={(e) => setScheduledFor(e.target.value)}
+              style={{ marginTop: 10 }}
+              required
+            />
+          )}
+        </div>
+      )}
+    </>
+  );
+
+  let pickupSection;
+  if (activeRequests.length > 0) {
+    pickupSection = (
+      <>
+        <div className="hero-line">Ticket received</div>
+        <h1 className="title">We&apos;re on it</h1>
+        {activeStubs}
+        {carsFree.length > 0 && (
+          <>
+            <div className="stub-divider" style={{ margin: "22px 0" }}></div>
+            <div className="hero-line">Need another car?</div>
+            {carList}
+          </>
         )}
-      </div>
+      </>
+    );
+  } else {
+    pickupSection = (
+      <>
+      {upcomingRequests.length > 0 && (
+        <>
+          <div className="hero-line">Need it sooner?</div>
+          <h1 className="title" style={{ fontSize: 22 }}>
+            Request your car now
+          </h1>
+        </>
+      )}
+      {myCars.length === 0 && (
+        <div className="empty-state">
+          <div className="big">No vehicles yet</div>
+          Ask your building's front desk or admin to add your vehicle to your account.
+        </div>
+      )}
+      {carList}
       </>
     );
   }
@@ -1264,6 +1310,12 @@ function GuestView({ user }) {
             <span>Scheduled for</span>
             <span>{new Date(r.scheduledFor).toLocaleString()}</span>
           </div>
+          {byOther(r) && (
+            <div className="stub-row">
+              <span>Scheduled by</span>
+              <span>{byOther(r)}</span>
+            </div>
+          )}
           <button className="btn btn-ghost" style={{ marginTop: 10 }} onClick={() => cancel(r.id)}>
             Cancel scheduled pickup
           </button>
@@ -1329,6 +1381,12 @@ function GuestView({ user }) {
                 <span>Vehicle</span>
                 <span>{vehicleLabel(r.vehicle)}</span>
               </div>
+              {byOther(r) && (
+                <div className="stub-row">
+                  <span>Requested by</span>
+                  <span>{byOther(r)}</span>
+                </div>
+              )}
               {r.status === "WAITING" && (
                 <button className="btn btn-ghost" style={{ marginTop: 10 }} onClick={() => cancel(r.id)}>
                   Cancel charging request
@@ -1391,7 +1449,7 @@ function GuestView({ user }) {
   return (
     <>
       {error && <div className="error-box">{error}</div>}
-      {activeRequest ? (
+      {activeRequests.length > 0 ? (
         <>
           {pickupSection}
           {scheduledSection && (
@@ -2081,6 +2139,203 @@ function StaffView({ user, tab, setTab, vehiclesFilterBuilding, setVehiclesFilte
 }
 
 // ---------------- ADMIN: VEHICLES ----------------
+// "Unit 1204", "#1204", "apt 1204" and "1204" all count as the same unit.
+function normalizeUnit(unit) {
+  return String(unit || "")
+    .toLowerCase()
+    .replace(/\b(unit|apt|apartment|suite|ste)\b\.?/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+// Names on a car's parking application, e.g. "John Smith, Mary Smith".
+function carPeopleNames(v, withUsernames = false) {
+  const people = [v.owner, ...(v.drivers || []).map((d) => d.user)].filter(Boolean);
+  return people
+    .map((p) => (withUsernames && p.username ? `${p.name} (${p.username})` : p.name))
+    .join(", ");
+}
+
+// Manager/admin: everyone on a car's monthly parking application. The main
+// name is the car's owner; others can be added or taken off. Everyone listed
+// can see and request the car.
+function CarPeople({ vehicle, residents, onChanged }) {
+  const [adding, setAdding] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  if (vehicle.isVisitor) return null;
+
+  const drivers = vehicle.drivers || [];
+  const onCar = new Set([vehicle.ownerId, ...drivers.map((d) => d.userId)]);
+  const ownerUnit = normalizeUnit(vehicle.owner?.unitNumber);
+  const candidates = (residents || [])
+    .filter((u) => u.role === "GUEST" && (u.building?.id || null) === (vehicle.buildingId || null) && !onCar.has(u.id))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const sameUnit = ownerUnit ? candidates.filter((u) => normalizeUnit(u.unitNumber) === ownerUnit) : [];
+  const others = candidates.filter((u) => !sameUnit.includes(u));
+  const label = (u) => `${u.name}${u.unitNumber ? ` · Unit ${u.unitNumber}` : ""}`;
+
+  async function add() {
+    if (!adding) return;
+    setBusy(true);
+    setErr("");
+    try {
+      const res = await fetch(`/api/vehicles/${vehicle.id}/drivers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: adding }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setErr(data.error || "Couldn't add that person."); return; }
+      setAdding("");
+      onChanged && onChanged();
+    } catch {
+      setErr("Couldn't reach the server. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(userId) {
+    setBusy(true);
+    setErr("");
+    try {
+      const res = await fetch(`/api/vehicles/${vehicle.id}/drivers/${userId}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setErr(data.error || "Couldn't take that person off."); return; }
+      onChanged && onChanged();
+    } catch {
+      setErr("Couldn't reach the server. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="car-people">
+      <div className="car-people-title">People on this car&apos;s parking application</div>
+      <p className="car-people-hint">Everyone listed can see this car in the app and request it.</p>
+      {err && <div className="error-box">{err}</div>}
+      <div className="car-person">
+        <span>
+          {vehicle.owner?.name || "—"}
+          <span className="car-person-meta">
+            {vehicle.owner?.unitNumber ? ` · Unit ${vehicle.owner.unitNumber}` : ""} · main name
+          </span>
+        </span>
+      </div>
+      {drivers.map((d) => (
+        <div className="car-person" key={d.userId}>
+          <span>
+            {d.user?.name || "—"}
+            <span className="car-person-meta">{d.user?.unitNumber ? ` · Unit ${d.user.unitNumber}` : ""}</span>
+          </span>
+          <button type="button" className="car-person-remove" disabled={busy} onClick={() => remove(d.userId)}>
+            Take off
+          </button>
+        </div>
+      ))}
+      {candidates.length > 0 ? (
+        <div className="car-people-add">
+          <select value={adding} onChange={(e) => setAdding(e.target.value)} aria-label="Add a person to this car">
+            <option value="">Add a person…</option>
+            {sameUnit.length > 0 && (
+              <optgroup label="Same unit">
+                {sameUnit.map((u) => (
+                  <option key={u.id} value={u.id}>{label(u)}</option>
+                ))}
+              </optgroup>
+            )}
+            {others.length > 0 && (
+              <optgroup label={sameUnit.length > 0 ? "Others in the building" : "Residents"}>
+                {others.map((u) => (
+                  <option key={u.id} value={u.id}>{label(u)}</option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+          <button type="button" className="mini-btn start" disabled={!adding || busy} onClick={add}>
+            Add
+          </button>
+        </div>
+      ) : (
+        <p className="car-people-hint">To add someone else, create their account first.</p>
+      )}
+    </div>
+  );
+}
+
+// Manager/admin, from a resident's account: add them to a car that's already
+// on file (they're on that car's parking application too).
+function AddToExistingCar({ person, vehicles, onChanged }) {
+  const [carId, setCarId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const buildingId = person.building?.id || null;
+  const candidates = (vehicles || []).filter(
+    (v) =>
+      !v.isVisitor &&
+      (v.buildingId || null) === buildingId &&
+      v.ownerId !== person.id &&
+      !(v.drivers || []).some((d) => d.userId === person.id)
+  );
+  if (candidates.length === 0) return null;
+  const myUnit = normalizeUnit(person.unitNumber);
+  const sameUnit = myUnit ? candidates.filter((v) => normalizeUnit(v.owner?.unitNumber) === myUnit) : [];
+  const others = candidates.filter((v) => !sameUnit.includes(v));
+  const label = (v) => `#${v.ticketNumber} · ${vehicleLabel(v)} · ${v.owner?.name || ""}`;
+
+  async function add() {
+    if (!carId) return;
+    setBusy(true);
+    setErr("");
+    try {
+      const res = await fetch(`/api/vehicles/${carId}/drivers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: person.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setErr(data.error || "Couldn't add them to that car."); return; }
+      setCarId("");
+      onChanged && onChanged();
+    } catch {
+      setErr("Couldn't reach the server. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="car-people" style={{ marginTop: 10 }}>
+      <div className="car-people-title">Add to a car already on file</div>
+      <p className="car-people-hint">For a car whose parking application also has {firstName(person.name) || "this person"}&apos;s name on it.</p>
+      {err && <div className="error-box">{err}</div>}
+      <div className="car-people-add">
+        <select value={carId} onChange={(e) => setCarId(e.target.value)} aria-label="Choose a car">
+          <option value="">Choose a car…</option>
+          {sameUnit.length > 0 && (
+            <optgroup label="Same unit">
+              {sameUnit.map((v) => (
+                <option key={v.id} value={v.id}>{label(v)}</option>
+              ))}
+            </optgroup>
+          )}
+          {others.length > 0 && (
+            <optgroup label={sameUnit.length > 0 ? "Other cars in the building" : "Cars in the building"}>
+              {others.map((v) => (
+                <option key={v.id} value={v.id}>{label(v)}</option>
+              ))}
+            </optgroup>
+          )}
+        </select>
+        <button type="button" className="mini-btn start" disabled={!carId || busy} onClick={add}>
+          Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function VehiclesView({ filterBuilding, setFilterBuilding, currentUser }) {
   const isStaff = currentUser?.role === "STAFF";
   const [vehicles, setVehicles] = useState([]);
@@ -2284,7 +2539,7 @@ function VehiclesView({ filterBuilding, setFilterBuilding, currentUser }) {
         (v.make || "").toLowerCase().includes(q) ||
         (v.model || "").toLowerCase().includes(q) ||
         (v.ticketNumber || "").toLowerCase().includes(q) ||
-        (v.owner?.name || "").toLowerCase().includes(q) ||
+        carPeopleNames(v).toLowerCase().includes(q) ||
         (v.section || "").toLowerCase().includes(q) ||
         (v.location || "").toLowerCase().includes(q)
       );
@@ -2318,14 +2573,14 @@ function VehiclesView({ filterBuilding, setFilterBuilding, currentUser }) {
             <td>${v.location || "—"}</td>
             <td>${v.section || "—"}</td>
             <td>${v.washDay ? v.washDay.charAt(0) + v.washDay.slice(1).toLowerCase() : "—"}</td>
-            <td>${v.owner?.name || "—"}</td>
+            <td>${carPeopleNames(v) || "—"}</td>
           </tr>`
           )
           .join("");
         return `
           <h2>${groupName} (${list.length})</h2>
           <table>
-            <thead><tr><th>Decal #</th><th>Vehicle</th><th>Plate</th><th>Location</th><th>Section</th><th>Wash day</th><th>Owner</th></tr></thead>
+            <thead><tr><th>Decal #</th><th>Vehicle</th><th>Plate</th><th>Location</th><th>Section</th><th>Wash day</th><th>Name(s)</th></tr></thead>
             <tbody>${rows || `<tr><td colspan="7">No vehicles.</td></tr>`}</tbody>
           </table>`;
       })
@@ -2624,7 +2879,7 @@ function VehiclesView({ filterBuilding, setFilterBuilding, currentUser }) {
                       </div>
                       <div className="meta">
                         {v.licensePlate || "No plate on file"}
-                        {v.location && ` · ${v.location}`} · owner: {v.owner?.name} ({v.owner?.username})
+                        {v.location && ` · ${v.location}`} · {(v.drivers || []).length > 0 ? "shared by" : "owner"}: {carPeopleNames(v, true)}
                       </div>
                     </div>
                     {!isStaff && (
@@ -2781,6 +3036,7 @@ function VehiclesView({ filterBuilding, setFilterBuilding, currentUser }) {
                       <button className="mini-btn start" onClick={() => saveEditVehicle(v.id)}>
                         Save changes
                       </button>
+                      <CarPeople vehicle={v} residents={users} onChanged={load} />
                     </div>
                   )}
                   </div>
@@ -3977,6 +4233,19 @@ function UserAdmin({ currentUser }) {
     load();
   }
 
+  const onCar = (v, userId) => v.ownerId === userId || (v.drivers || []).some((d) => d.userId === userId);
+
+  async function takeOffCar(vehicleId, userId) {
+    setEditUserVehicleError("");
+    const res = await fetch(`/api/vehicles/${vehicleId}/drivers/${userId}`, { method: "DELETE" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setEditUserVehicleError(data.error || "Couldn't take them off that car.");
+      return;
+    }
+    load();
+  }
+
   async function removeUserVehicle(id) {
     const res = await fetch(`/api/vehicles/${id}`, { method: "DELETE" });
     const data = await res.json();
@@ -4585,9 +4854,28 @@ function UserAdmin({ currentUser }) {
               <span style={{ fontWeight: 600 }}>{r.name}</span>
               <span>username: {r.username}</span>
               {r.unit && <span style={{ color: "var(--slate2)" }}>unit: {r.unit}</span>}
-              {r.decal && <span style={{ color: "var(--slate2)" }}>decal: {r.decal}</span>}
+              {r.decals?.length > 0 && (
+                <span style={{ color: "var(--slate2)" }}>
+                  {r.decals.length === 1 ? "decal" : "decals"}: {r.decals.join(", ")}
+                </span>
+              )}
             </div>
           ))}
+          {importResults.updates?.length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 12, color: "var(--slate2)", marginBottom: 4, fontWeight: 600 }}>
+                Cars added or shared:
+              </div>
+              {importResults.updates.map((u, i) => (
+                <div key={i} style={{ fontSize: 12, marginBottom: 3 }}>{u.message}</div>
+              ))}
+            </div>
+          )}
+          {importResults.unchanged > 0 && (
+            <div style={{ fontSize: 12, color: "var(--slate2)", marginTop: 8 }}>
+              {importResults.unchanged} row{importResults.unchanged !== 1 ? "s were" : " was"} already set up — nothing changed.
+            </div>
+          )}
           <button
             className="btn btn-ghost"
             style={{ marginTop: 8, width: "auto", padding: "8px 14px", fontSize: 12 }}
@@ -4637,7 +4925,7 @@ function UserAdmin({ currentUser }) {
             {selectedVisible.length > 5 ? ` and ${selectedVisible.length - 5} more` : ""}
           </div>
           <div style={{ fontSize: 13, lineHeight: 1.5, marginBottom: 12 }}>
-            This also permanently deletes their cars and request history. This can't be undone.
+            Their request history and any car only they are on will be permanently deleted. Cars shared with someone who's staying stay with that person. This can't be undone.
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
@@ -4741,7 +5029,7 @@ function UserAdmin({ currentUser }) {
                   onClick={() => {
                     if (
                       window.confirm(
-                        `Remove ${u.name} (${u.username})? This will also permanently delete any vehicles and request history tied to this account. This can't be undone.`
+                        `Remove ${u.name} (${u.username})? Their request history and any car only they are on will be permanently deleted. Cars shared with others stay with the other people. This can't be undone.`
                       )
                     ) {
                       removeUser(u.id);
@@ -4795,21 +5083,24 @@ function UserAdmin({ currentUser }) {
 
                   {editUserVehicleError && <div className="error-box">{editUserVehicleError}</div>}
 
-                  {vehicles.filter((v) => v.ownerId === u.id).length === 0 && (
+                  {vehicles.filter((v) => onCar(v, u.id)).length === 0 && (
                     <p style={{ fontSize: 13, color: "var(--slate2)", marginBottom: 10 }}>
                       No vehicles on file yet.
                     </p>
                   )}
 
                   {vehicles
-                    .filter((v) => v.ownerId === u.id)
+                    .filter((v) => onCar(v, u.id))
                     .map((v) => (
                       <div key={v.id} style={{ marginBottom: 8 }}>
                         <div className="queue-item">
                           <div className="queue-num">#{v.ticketNumber}</div>
                           <div className="queue-info">
                             <div className="car">{vehicleLabel(v)}</div>
-                            <div className="meta">{v.licensePlate || "No plate on file"}</div>
+                            <div className="meta">
+                              {v.licensePlate || "No plate on file"}
+                              {(v.drivers || []).length > 0 && ` · shared by ${carPeopleNames(v)}`}
+                            </div>
                           </div>
                           <div className="queue-actions">
                             <button
@@ -4822,16 +5113,33 @@ function UserAdmin({ currentUser }) {
                             >
                               Edit
                             </button>
-                            <button
-                              className="mini-btn done"
-                              onClick={() => {
-                                if (window.confirm(`Remove vehicle #${v.ticketNumber}?`)) {
-                                  removeUserVehicle(v.id);
-                                }
-                              }}
-                            >
-                              Remove
-                            </button>
+                            {v.ownerId === u.id ? (
+                              <button
+                                className="mini-btn done"
+                                onClick={() => {
+                                  const shared = (v.drivers || []).length > 0;
+                                  if (
+                                    window.confirm(
+                                      shared
+                                        ? `Remove vehicle #${v.ticketNumber}? It's shared, so it will also disappear for ${(v.drivers || []).map((d) => d.user?.name).join(", ")}.`
+                                        : `Remove vehicle #${v.ticketNumber}?`
+                                    )
+                                  ) {
+                                    removeUserVehicle(v.id);
+                                  }
+                                }}
+                              >
+                                Remove
+                              </button>
+                            ) : (
+                              <button
+                                className="mini-btn done"
+                                title={`Take ${u.name} off this car. The car stays with ${v.owner?.name || "its main name"}.`}
+                                onClick={() => takeOffCar(v.id, u.id)}
+                              >
+                                Take off
+                              </button>
+                            )}
                           </div>
                         </div>
 
@@ -4932,10 +5240,13 @@ function UserAdmin({ currentUser }) {
                               disabled={editVehiclePhotoUploading}>
                               Save changes
                             </button>
+                            <CarPeople vehicle={v} residents={users} onChanged={load} />
                           </div>
                         )}
                       </div>
                     ))}
+
+                  <AddToExistingCar person={u} vehicles={vehicles} onChanged={load} />
 
                   {showAddVehicleForUser ? (
                     <form onSubmit={(e) => addVehicleForUser(e, u.id)} style={{ marginTop: 10 }}>

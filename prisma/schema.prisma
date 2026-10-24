@@ -58,6 +58,7 @@ model User {
   handledRequests Request[] @relation("HandledBy")
   washLogs        WashLog[]
   adminBuildings  AdminBuilding[]
+  sharedVehicles  VehicleDriver[]
 
   @@index([buildingId])
 }
@@ -84,11 +85,27 @@ model Vehicle {
 
   requests  Request[]
   washLogs  WashLog[]
+  drivers   VehicleDriver[]
 
   // Ticket numbers only need to be unique within a building, so two
   // garages can both use ticket #1042.
   @@unique([buildingId, ticketNumber])
   @@index([ownerId])
+}
+
+// Other people named on a car's monthly parking application. The first name
+// on the application is the car's owner (Vehicle.ownerId); everyone listed
+// here can also see the car and request it.
+model VehicleDriver {
+  id        String   @id @default(cuid())
+  vehicleId String
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([vehicleId, userId])
+  @@index([userId])
 }
 
 model WashLog {

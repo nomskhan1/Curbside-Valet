@@ -1,5 +1,6 @@
 const prisma = require("../../../../lib/db");
 const { getSessionFromRequest } = require("../../../../lib/auth");
+const { canUseVehicle } = require("../../../../lib/vehicleAccess");
 
 const VALID_STATUSES = ["WAITING", "PULLING", "READY", "COMPLETED", "CANCELLED"];
 
@@ -23,7 +24,11 @@ async function PATCH(req, { params }) {
     return new Response(JSON.stringify({ error: "Request not found." }), { status: 404 });
   }
 
-  const isOwner = existing.requestedById === session.id;
+  // The person who asked, or anyone named on the car (e.g. a spouse), may
+  // cancel a resident's request.
+  const isOwner =
+    existing.requestedById === session.id ||
+    (session.role === "GUEST" && !existing.vehicle.isVisitor && (await canUseVehicle(prisma, session.id, existing.vehicle)));
   const isStaff = session.role === "STAFF" || session.role === "MANAGER" || session.role === "ADMIN";
 
   // Staff and managers (not admin) can only act on requests from their own building.
@@ -37,7 +42,7 @@ async function PATCH(req, { params }) {
     });
   }
 
-  // Guests may only cancel their own request, and only while it's still open
+  // Guests may only cancel their own (or their shared car's) request, and only while it's still open
   // (waiting, being brought out, or ready at the curb). Staff/admin can set
   // any status.
   if (status === "CANCELLED") {

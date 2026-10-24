@@ -9,6 +9,9 @@ async function GET(req) {
   const template = [
     "first_name,last_name,unit,make,model,color,license_plate,decal_number,section,location,wash_day,fuel_type",
     "John,Smith,101,Toyota,Camry,Silver,ABC1234,D101,A,Level 1 Spot 12,MONDAY,GASOLINE",
+    // Mary is on the same parking application as John, so the same car
+    // (same decal) is listed again with her name. Both will see it.
+    "Mary,Smith,101,Toyota,Camry,Silver,ABC1234,D101,A,Level 1 Spot 12,MONDAY,GASOLINE",
     "Jane,Doe,202,Honda,Civic,Blue,XYZ5678,D202,B,Level 2 Spot 5,WEDNESDAY,GASOLINE",
   ].join("\n");
 

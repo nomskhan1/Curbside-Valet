@@ -180,3 +180,14 @@ footer.note{ text-align:center; font-size:11px; color:var(--slate2); padding:14p
 .bulk-clear-btn{ background:none; border:1px solid var(--line); color:var(--ink); border-radius:8px; padding:8px 14px; font-size:13px; cursor:pointer; }
 .bulk-confirm{ margin-top:10px; padding:14px 16px; border:1px solid var(--red); border-radius:10px; background:rgba(176,65,58,0.08); color:#7A2A26; }
 .bulk-done{ padding:10px 14px; border:1px solid var(--green); border-radius:8px; background:rgba(74,120,86,0.1); color:#2F5A3B; font-size:13px; }
+
+/* People on a car's parking application (shared cars) */
+.car-people{ margin-top:14px; padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:var(--bg-2); }
+.car-people-title{ font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:var(--brass-light); margin-bottom:4px; }
+.car-people-hint{ font-size:12px; color:var(--slate2); margin:0 0 8px; }
+.car-person{ display:flex; justify-content:space-between; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid var(--line); font-size:14px; }
+.car-person-meta{ font-size:12px; color:var(--slate2); }
+.car-person-remove{ background:none; border:none; color:var(--red); font-size:11px; text-transform:uppercase; letter-spacing:0.04em; cursor:pointer; padding:0; }
+.car-person-remove:disabled{ opacity:0.5; cursor:default; }
+.car-people-add{ display:flex; gap:8px; align-items:center; margin-top:10px; }
+.car-people-add select{ flex:1; min-width:0; padding:9px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--ink); font-size:14px; }
